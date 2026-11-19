@@ -4,6 +4,11 @@ Toutes les évolutions notables de Taupe. Format inspiré de [Keep a Changelog](
 
 ## [Non publié]
 
+### Ajouté
+- **L'assistant agit dans Taupe** : il cherche, lit des dossiers, repère les gros fichiers, ouvre, coche et propose des mises à la corbeille (toujours confirmées par l'utilisateur).
+- Chaque action de l'IA s'affiche **en direct avec une animation** dans l'assistant, et l'interface réagit (dossier ouvert, lignes sélectionnées).
+- Bouton « Arrêter » pendant une réponse de l'IA.
+
 ## [1.0.0] - 2026-11-19
 
 Première version publique.

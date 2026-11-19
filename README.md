@@ -61,6 +61,15 @@ Clique sur **Continuer avec Claude** ou **Continuer avec ChatGPT** dans l'assist
 
 Le bouton **Comptes**, en haut de l'assistant, affiche l'état des connexions et permet de se déconnecter.
 
+### L'assistant agit pour toi
+
+Demande-lui par exemple « trouve tous les node_modules et sélectionne-les » ou « supprime les vieux installeurs .dmg ». L'assistant peut :
+- **chercher** des fichiers par nom, **lire** un dossier, repérer les **plus gros fichiers** ;
+- **ouvrir** un dossier dans Taupe et **cocher** des éléments ;
+- **proposer une mise à la corbeille** : une carte de confirmation s'affiche, et rien n'est supprimé tant que tu n'as pas cliqué.
+
+Chaque action s'affiche en direct dans l'assistant, avec une animation. Techniquement, Taupe expose ces outils à Claude Code / Codex via un petit serveur [MCP](https://modelcontextprotocol.io) local (`src/mcp.mjs`). L'IA n'a accès à aucun autre outil : pas de shell, pas de lecture de fichiers.
+
 **Confidentialité** : l'IA reçoit uniquement des **chemins, tailles et dates**, jamais le contenu de tes fichiers. Elle ne peut rien supprimer : c'est toujours toi qui coches puis confirmes.
 
 ## Raccourcis
