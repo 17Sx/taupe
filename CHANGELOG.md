@@ -4,17 +4,24 @@ All notable changes to Taupe are documented in this file. The format is based on
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-19
+
 ### Added
-- **The assistant acts in Taupe**: it searches, reads folders, finds big files, opens folders, checks items and proposes moving them to the Trash (always confirmed by the user).
-- Every AI action shows up **live with an animation** in the assistant, and the UI reacts (folder opened, rows selected).
+- **The assistant acts in Taupe** through a local MCP server: it searches files, reads folders, finds big files, opens folders, checks items and proposes moving them to the Trash.
+- Every AI action shows up **live with an animation** in the assistant, and the UI follows along (folder opened, rows flashed when selected).
+- Trash confirmation card listing every proposed item with a checkbox each, paths relative to the open folder and a live total: only the items you keep checked are moved.
+- "+ ChatGPT" / "+ Claude" link next to the model picker to connect a second AI account.
 - "Stop" button while the AI is responding.
-- The app is available in English and French; it follows the system language and can be changed in View → Language.
+- **English and French** app: it follows the system language and can be changed in View → Language; the assistant and the AI analysis answer in that language.
+- Repository documentation in English, with a French README (`README.fr.md`).
 
 ### Changed
 - Back to the paw-print logo: app icon, header logo and tab icon.
 
 ### Fixed
 - The window always shows up at startup, and a clear error appears if the engine does not respond.
+- Hidden buttons ("Browse…", "Assistant") no longer reappear.
+- Selecting a folder together with its contents is de-duplicated correctly on Windows.
 
 ## [1.0.0] - 2026-11-19
 
