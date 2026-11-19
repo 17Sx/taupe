@@ -1,10 +1,10 @@
-name: 💡 Idée
-description: Proposer une amélioration
+name: 💡 Idea
+description: Suggest an improvement
 labels: [enhancement]
 body:
   - type: textarea
     id: idea
     attributes:
-      label: Ton idée
-      description: Le problème que ça résout et comment tu l'imagines.
+      label: Your idea
+      description: The problem it solves and how you picture it.
     validations: { required: true }

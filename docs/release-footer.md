@@ -1,16 +1,16 @@
 
 ---
 
-### Installer
+### Install
 
-| Système | Fichier |
+| System | File |
 |---|---|
 | macOS Apple Silicon (M1–M4) | `Taupe-…-mac-arm64.dmg` |
 | macOS Intel | `Taupe-…-mac-x64.dmg` |
-| Windows (installeur) | `Taupe-…-win-x64-setup.exe` |
-| Windows (sans installation) | `Taupe-…-win-x64-portable.exe` |
+| Windows (installer) | `Taupe-…-win-x64-setup.exe` |
+| Windows (no install) | `Taupe-…-win-x64-portable.exe` |
 
-**macOS** — l'app n'est pas encore notariée par Apple. Au premier lancement : clic droit sur Taupe → **Ouvrir**, ou dans le Terminal :
+**macOS** — the app is not notarized by Apple yet. On first launch: right-click Taupe → **Open**, or run this in Terminal:
 `xattr -cr /Applications/Taupe.app`
 
-**Windows** — SmartScreen peut afficher « Windows a protégé votre ordinateur » : **Informations complémentaires → Exécuter quand même**.
+**Windows** — SmartScreen may show "Windows protected your PC": click **More info → Run anyway**.
