@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const HOME = os.homedir();
-export const PROVIDERS = { claude: 'Claude (abonnement Claude)', codex: 'ChatGPT (abonnement via Codex)' };
+export const PROVIDERS = { claude: 'Claude', codex: 'ChatGPT' };
 
 const SCHEMA = {
   type: 'object', additionalProperties: false, required: ['summary', 'suggestions'],
@@ -54,44 +54,61 @@ Réponds uniquement avec le JSON demandé.
 === DONNÉES ===
 `;
 
-// ---------- Localisation des binaires ----------
+// ---------- Localisation des binaires (macOS, Windows, Linux) ----------
+const IS_WIN = process.platform === 'win32';
 const binCache = new Map();
-async function findBin(name) {
-  if (binCache.has(name)) return binCache.get(name);
-  const dirs = [path.join(HOME, '.local/bin'), path.join(HOME, '.claude/local'), '/opt/homebrew/bin', '/usr/local/bin',
-    path.join(HOME, '.bun/bin'), path.join(HOME, '.npm-global/bin'), ...(process.env.PATH || '').split(':')];
+async function findBin(name, fresh = false) {
+  if (!fresh && binCache.has(name)) return binCache.get(name);
+  const env = process.env;
+  const dirs = IS_WIN
+    ? [path.join(HOME, '.local', 'bin'), env.APPDATA && path.join(env.APPDATA, 'npm'), env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, 'Programs', name),
+      path.join(HOME, '.bun', 'bin'), ...(env.PATH || '').split(path.delimiter)]
+    : [path.join(HOME, '.local/bin'), path.join(HOME, '.claude/local'), '/opt/homebrew/bin', '/usr/local/bin',
+      path.join(HOME, '.bun/bin'), path.join(HOME, '.npm-global/bin'), ...(env.PATH || '').split(path.delimiter)];
+  const names = IS_WIN ? [`${name}.exe`, `${name}.cmd`, `${name}.bat`] : [name];
   let found = null;
-  for (const d of dirs) {
-    const p = path.join(d, name);
-    try { fs.accessSync(p, fs.constants.X_OK); found = p; break; } catch {}
+  outer: for (const d of dirs.filter(Boolean)) for (const n of names) {
+    const p = path.join(d, n);
+    try { fs.accessSync(p, IS_WIN ? fs.constants.F_OK : fs.constants.X_OK); if (fs.statSync(p).isFile()) { found = p; break outer; } } catch {}
   }
-  if (!found) {
-    found = await new Promise(res => execFile('/bin/zsh', ['-lic', `command -v ${name}`], { timeout: 6000 },
-      (e, out) => res(!e && out.trim().startsWith('/') ? out.trim().split('\n').pop() : null)));
+  if (!found) { // dernier recours : demander au shell de l'utilisateur
+    found = await new Promise(res => IS_WIN
+      ? execFile('where.exe', [name], { timeout: 6000 }, (e, out) => res(!e ? out.trim().split(/\r?\n/)[0] || null : null))
+      : execFile(process.env.SHELL || '/bin/zsh', ['-lic', `command -v ${name}`], { timeout: 6000 },
+        (e, out) => res(!e && out.trim().startsWith('/') ? out.trim().split('\n').pop() : null)));
   }
   binCache.set(name, found);
   return found;
-}
-
-export async function available() {
-  const out = {};
-  for (const k of Object.keys(PROVIDERS)) out[k] = !!(await findBin(k));
-  return out;
 }
 
 function childEnv() {
   const env = { ...process.env };
   // On veut l'abonnement, pas une clé API facturée à l'usage ; et pas de détection « session imbriquée ».
   // (et si Taupe est lancé depuis une app Claude, on ne réutilise pas son proxy/sa session)
-  for (const k of Object.keys(env)) if (/^(CLAUDE|ANTHROPIC_|OPENAI_API_KEY$|AI_AGENT$|BAGGAGE$)/.test(k)) delete env[k];
+  for (const k of Object.keys(env)) if (/^(CLAUDE|ANTHROPIC_|OPENAI_API_KEY$|AI_AGENT$|BAGGAGE$|ELECTRON_)/.test(k)) delete env[k];
   return env;
+}
+
+// Sous Windows, les CLI installées par npm sont des scripts .cmd : il faut passer par cmd.exe
+// avec un échappement strict des arguments (même logique que le paquet cross-spawn).
+function winQuote(arg, cmdShim) {
+  arg = String(arg).replace(/(\\*)"/g, '$1$1\\"').replace(/(\\*)$/, '$1$1');
+  arg = `"${arg}"`.replace(/[()%!^"<>&|]/g, '^$&');
+  return cmdShim ? arg.replace(/[()%!^"<>&|]/g, '^$&') : arg;
+}
+function spawnCli(bin, args, opts) {
+  if (IS_WIN && /\.(cmd|bat)$/i.test(bin)) {
+    const line = [winQuote(bin, false), ...args.map(a => winQuote(a, true))].join(' ');
+    return spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', `"${line}"`], { ...opts, windowsVerbatimArguments: true, windowsHide: true });
+  }
+  return spawn(bin, args, { ...opts, windowsHide: true });
 }
 
 function runProc(bin, args, input, cwd, timeoutMs) {
   return new Promise((resolve, reject) => {
-    const p = spawn(bin, args, { cwd, env: childEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
+    const p = spawnCli(bin, args, { cwd, env: childEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '', err = '';
-    const t = setTimeout(() => { p.kill('SIGTERM'); reject(new Error(`Délai dépassé (${timeoutMs / 1000} s)`)); }, timeoutMs);
+    const t = setTimeout(() => { p.kill(); reject(new Error(`Délai dépassé (${timeoutMs / 1000} s)`)); }, timeoutMs);
     p.stdout.on('data', d => (out += d));
     p.stderr.on('data', d => (err += d));
     p.on('error', e => { clearTimeout(t); reject(e); });
@@ -102,7 +119,7 @@ function runProc(bin, args, input, cwd, timeoutMs) {
       try { const o = JSON.parse(out); if (o.result) msg = String(o.result); } catch {}
       reject(new Error(msg || `code ${code}`));
     });
-    p.stdin.end(input);
+    p.stdin.end(input ?? '');
   });
 }
 
@@ -154,4 +171,81 @@ export function chat(provider, context, messages) {
   const convo = messages.slice(-12).map(m => `${m.role === 'user' ? 'Utilisateur' : 'Assistant'} : ${String(m.content).slice(0, 4000)}`).join('\n\n');
   return call(provider, `${CHAT_PROMPT}\n=== CONTEXTE ===\n${context}\n\n=== CONVERSATION ===\n${convo}\n\nRéponds au dernier message de l'utilisateur.`,
     { fast: true, timeoutMs: 180000 });
+}
+
+// ---------- Comptes : statut, connexion, déconnexion ----------
+export const INSTALL = {
+  claude: { mac: 'curl -fsSL https://claude.ai/install.sh | bash', win: 'irm https://claude.ai/install.ps1 | iex',
+    docs: 'https://docs.claude.com/en/docs/claude-code/setup' },
+  codex: { mac: 'npm install -g @openai/codex', win: 'npm install -g @openai/codex', docs: 'https://github.com/openai/codex' },
+};
+const stripAnsi = s => s.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/\x1b\][^\x07]*\x07/g, '');
+
+async function status(provider) {
+  const bin = await findBin(provider, true);
+  const install = INSTALL[provider][IS_WIN ? 'win' : 'mac'];
+  if (!bin) return { installed: false, loggedIn: false, install, docs: INSTALL[provider].docs };
+  const base = { installed: true, install, docs: INSTALL[provider].docs };
+  try {
+    if (provider === 'claude') {
+      const out = await runProc(bin, ['auth', 'status'], '', os.tmpdir(), 20000);
+      const j = JSON.parse(out.slice(out.indexOf('{')));
+      return { ...base, loggedIn: !!j.loggedIn, detail: j.email || j.account?.email || (j.loggedIn ? j.authMethod : '') || '' };
+    }
+    const out = stripAnsi(await runProc(bin, ['login', 'status'], '', os.tmpdir(), 20000)).trim();
+    return { ...base, loggedIn: true, detail: out.split('\n').pop() };
+  } catch (e) {
+    return { ...base, loggedIn: false, detail: '' };
+  }
+}
+
+let statusCache = null, statusAt = 0;
+export async function statusAll(refresh = false) {
+  if (!refresh && statusCache && Date.now() - statusAt < 60000) return statusCache;
+  const [claude, codex] = await Promise.all([status('claude'), status('codex')]);
+  statusCache = { claude, codex }; statusAt = Date.now();
+  return statusCache;
+}
+
+let loginJob = null;
+export function loginState() {
+  if (!loginJob) return null;
+  const { proc, ...j } = loginJob;
+  return { ...j, output: stripAnsi(j.output).slice(-600) };
+}
+
+export async function login(provider) {
+  if (!PROVIDERS[provider]) throw new Error('Fournisseur inconnu');
+  loginCancel();
+  const bin = await findBin(provider, true);
+  if (!bin) throw new Error(`CLI « ${provider} » non installée`);
+  const args = provider === 'claude' ? ['auth', 'login', '--claudeai'] : ['login'];
+  const proc = spawnCli(bin, args, { cwd: os.tmpdir(), env: childEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
+  const job = loginJob = { provider, status: 'running', started: Date.now(), url: '', needsCode: false, output: '', proc };
+  const onData = d => {
+    job.output += d.toString();
+    const clean = stripAnsi(job.output);
+    const m = clean.match(/https:\/\/[^\s"'<>]+/g);
+    if (m) job.url = m[m.length - 1];
+    if (/paste|code/i.test(clean.split('\n').slice(-3).join(' '))) job.needsCode = true;
+  };
+  proc.stdout.on('data', onData); proc.stderr.on('data', onData);
+  proc.on('error', e => Object.assign(job, { status: 'error', output: job.output + '\n' + e.message }));
+  proc.on('close', code => { if (job.status === 'running') job.status = code === 0 ? 'done' : 'error'; statusAt = 0; });
+  setTimeout(() => { if (job.status === 'running') loginCancel(); }, 10 * 60 * 1000);
+}
+
+export function loginCode(code) {
+  if (loginJob?.status === 'running' && code) loginJob.proc.stdin.write(code.trim() + '\n');
+}
+
+export function loginCancel() {
+  if (loginJob?.status === 'running') { loginJob.status = 'cancelled'; try { loginJob.proc.kill(); } catch {} }
+}
+
+export async function logout(provider) {
+  const bin = await findBin(provider);
+  if (!bin) return;
+  await runProc(bin, provider === 'claude' ? ['auth', 'logout'] : ['logout'], '', os.tmpdir(), 20000).catch(() => {});
+  statusAt = 0;
 }
