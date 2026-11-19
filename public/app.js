@@ -113,7 +113,7 @@ function renderHeader() {
   const d = S.data, n = d.node;
   $('#crumbs').innerHTML = d.crumbs.map((c, i) =>
     `<a data-id="${c.id}" title="${esc(i ? c.name : c.name)}">${esc(i ? c.name : pretty(c.name))}</a>`).join('<span class="sep">›</span>');
-  $('#curName').textContent = d.crumbs.length > 1 ? n.name : (pretty(n.name).split('/').filter(Boolean).pop() || '/');
+  $('#curName').textContent = d.crumbs.length > 1 ? n.name : d.path === HOME ? 'Dossier perso' : (pretty(n.name).split(SEP).filter(Boolean).pop() || n.name);
   $('#curName').title = d.path;
   let meta = `${fmtSize(n.size)} · ${nf.format(n.count)} fichiers`;
   if (S.root && S.cur === S.root.id && S.status?.volume && S.root.path === '/') {
@@ -178,7 +178,7 @@ function renderList(opts = {}) {
       <span class="mt r col-mt" title="${r.mtime ? new Date(r.mtime * 1000).toLocaleString('fr-FR') : ''}">${relTime(r.mtime)}</span>
     </div>`;
   });
-  if (!S.view.length) html = `<div class="empty">${S.filter ? 'Aucun résultat pour ce filtre' : S.tab === 'hogs' ? 'Rien de connu à nettoyer ici 🎉' : 'Dossier vide'}</div>`;
+  if (!S.view.length) html = `<div class="empty">${S.filter ? 'Aucun résultat pour ce filtre' : S.tab === 'hogs' ? 'Rien de connu à nettoyer ici' : 'Dossier vide'}</div>`;
   if (S.rest && !S.filter) html += `<div class="rest">+ ${nf.format(S.rest.n)} autres éléments plus petits · ${fmtSize(S.rest.size)}</div>`;
   $('#list').innerHTML = html;
   $('#listInfo').textContent = `${nf.format(S.view.length)} élément${S.view.length > 1 ? 's' : ''}` + (S.tab === 'big' ? ' — les plus gros fichiers de ce dossier et sous-dossiers' : S.tab === 'hogs' ? ' — caches & dossiers régénérables connus' : '');
@@ -375,7 +375,7 @@ function renderRules(groups) {
     </div>`;
   }).join('');
   $('#ruleGroups').innerHTML = `<h2 class="stitle">Repéré automatiquement <span class="muted">· ≈ ${fmtSize(total)}</span></h2>` +
-    (html || '<p class="muted">Rien de suspect selon les règles automatiques 🎉 Essaie l’analyse IA.</p>');
+    (html || '<p class="muted">Rien de suspect selon les règles automatiques. Essaie l’analyse IA.</p>');
 }
 
 function renderAI(st) {
@@ -403,12 +403,13 @@ function renderAI(st) {
           (it.command ? `<div class="scmd"><code>${esc(it.command)}</code><button class="btn ghost sm" data-copy="${esc(it.command)}">Copier</button></div>` : ''),
       })).join('') || '<p class="muted">Aucune suggestion exploitable.</p>'}</div>`;
   } else {
-    body = `<p class="muted small">L’IA voit les noms, tailles et dates des éléments les plus lourds — <b>jamais le contenu de tes fichiers</b> — et propose quoi supprimer, avec le niveau de risque. Rien n’est supprimé sans toi.</p>`;
+    body = !Object.values(PROVS).some(ready) ? `<p class="muted small">Connecte ton abonnement Claude ou ChatGPT pour obtenir une liste triée de ce que tu peux supprimer, avec le niveau de risque. L’IA ne voit que les noms, tailles et dates — jamais le contenu de tes fichiers.</p>` : `<p class="muted small">L’IA voit les noms, tailles et dates des éléments les plus lourds — <b>jamais le contenu de tes fichiers</b> — et propose quoi supprimer, avec le niveau de risque. Rien n’est supprimé sans toi.</p>`;
   }
   $('#aiPanel').innerHTML = `<div class="aihead"><h2 class="stitle">${svg('sparkle')} Analyse IA</h2><span class="grow"></span>
-      <select id="aiProv"${running ? ' disabled' : ''}>${opts}</select>
-      <button class="btn ghost sm" data-accounts>Comptes IA</button>
-      <button class="btn primary sm" id="aiStart"${running || !Object.values(PROVS).some(ready) ? ' disabled' : ''}>${j.status === 'done' ? 'Relancer' : 'Analyser ce dossier'}</button></div>${body}`;
+      ${Object.values(PROVS).some(ready) ? `<select id="aiProv"${running ? ' disabled' : ''}>${opts}</select>
+      <button class="btn ghost sm" data-accounts data-icon-inline>${svg('gear')} Comptes</button>
+      <button class="btn primary sm" id="aiStart"${running ? ' disabled' : ''}>${j.status === 'done' ? 'Relancer' : 'Analyser ce dossier'}</button>`
+      : `<button class="btn primary sm" data-accounts>Connecter un compte</button>`}</div>${body}`;
   clearTimeout(aiTimer);
   if (running && S.tab === 'suggest') aiTimer = setTimeout(refreshAI, 1500);
 }
@@ -517,9 +518,12 @@ function mdLite(text, links = []) {
 function renderChat() {
   const box = $('#chatMsgs');
   if (!CHAT.length && !chatBusy) {
-    box.innerHTML = `<div class="chatempty"><p>Pose-moi des questions sur le dossier affiché : je vois les noms, tailles et dates (pas le contenu de tes fichiers).</p>
-      ${PROVS && !Object.values(PROVS).some(ready) ? `<p>⚠️ Aucun compte IA connecté.</p><button class="btn primary sm" data-accounts>Connecter Claude ou ChatGPT</button>`
-        : CHAT_IDEAS.map(q => `<button class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
+    box.innerHTML = PROVS && !Object.values(PROVS).some(ready)
+      ? `<div class="onboard"><span class="ob-ic">${svg('sparkle')}</span><b>Connecte ton IA</b>
+          <p>Pose des questions sur tes dossiers avec ton abonnement Claude ou ChatGPT. Pas de clé API, pas de frais en plus.</p>
+          <button class="btn primary sm" data-accounts>Connecter un compte</button></div>`
+      : `<div class="chatempty"><p>Pose-moi des questions sur le dossier affiché : je vois les noms, tailles et dates (pas le contenu de tes fichiers).</p>
+          ${CHAT_IDEAS.map(q => `<button class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
     return;
   }
   box.innerHTML = CHAT.map(m => m.role === 'user'
@@ -580,6 +584,9 @@ async function loadProviders(refresh) {
     const st = await get('/api/ai' + (refresh ? '?refresh=1' : ''));
     PROVS = st.providers;
     $('#chatProv').innerHTML = providerOptions();
+    const any = Object.values(PROVS).some(ready);
+    $('#chatInput').disabled = !any; $('#chatSend').disabled = !any || chatBusy; $('#chatProv').disabled = !any;
+    $('#chatInput').placeholder = any ? 'Pose une question sur ce dossier… (Entrée pour envoyer)' : 'Connecte un compte IA pour discuter';
     if ($('#aiProv') && st.job?.status !== 'running') $('#aiProv').innerHTML = providerOptions();
     if (!chatBusy) renderChat();
     return st;
