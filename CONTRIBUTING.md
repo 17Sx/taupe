@@ -20,7 +20,10 @@ npm start   # vérifie à la main dans l'application
 - Garde le moteur (`src/`) **sans dépendance** : uniquement des modules Node intégrés.
 - Tout ce qui dépend du système va dans `src/platform.mjs` ou `electron/main.mjs`.
 - Ajoute une ligne dans `CHANGELOG.md`, section « Non publié ».
-- Messages de commit courts, à l'impératif (« Ajoute… », « Corrige… »).
+- Messages de commit **en anglais**, au format [Conventional Commits](https://www.conventionalcommits.org/) :
+  `type(scope): description` à l'impératif, en minuscules, sans point final.
+  Types : `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`.
+  Exemples : `feat(ai): add one-click account connection`, `fix(scanner): skip APFS firmlinks`.
 
 ## Sécurité
 
