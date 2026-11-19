@@ -537,6 +537,7 @@ function renderChat() {
         ${m.pending ? '' : m.error ? esc(m.content) : mdLite(m.content || '', m.links)}
         ${m.pending ? '' : `<div class="msgmeta">${esc(AI_LABEL[m.provider] || m.provider || '')}${m.ms ? ` · ${Math.round(m.ms / 1000)} s` : ''}${m.ctx ? ` · <span title="${esc(m.ctx)}">${esc(short(m.ctx))}</span>` : ''}</div>`}
       </div>`).join('');
+  for (const c of box.querySelectorAll('.tcard[data-card]')) updateTrashCard(c);
   if (stick) box.scrollTop = box.scrollHeight;
 }
 const AI_LABEL = { claude: 'Claude', codex: 'ChatGPT', demo: 'Démo' };
@@ -546,27 +547,35 @@ const q = s => `« ${esc(s)} »`;
 // Chemin court lisible (2 derniers segments), chemin complet au survol
 const short = p => { const parts = String(p).split(SEP).filter(Boolean); return (parts.length > 2 ? '…' + SEP : (p.startsWith(SEP) ? SEP : '')) + parts.slice(-2).join(SEP); };
 const where = p => `<span class="ap" title="${esc(p)}">${esc(short(p))}</span>`;
+const relTo = (base, p) => (base && p.startsWith(base.endsWith(SEP) ? base : base + SEP) ? p.slice(base.length).replace(/^[\\/]/, '') : short(p));
+const TRASH_OFF = new Map(); // éléments décochés dans une carte de confirmation (clé chat:événement)
 function renderAct(e, m) {
   const run = e.status === 'running', k = `act ${e.type} ${run ? 'running' : e.status}`;
   const line = (label, extra = '') => `<div class="${k}"><i class="dot"></i><span class="lbl">${label}</span>${extra}</div>`;
-  const top = e.top?.length ? `<div class="asub">${e.top.map(p => esc(short(p))).join(' · ')}</div>` : '';
+  const rel = p => relTo(m.ctx, p);
+  const top = e.top?.length ? `<div class="asub">${e.top.map(p => esc(rel(p))).join(' · ')}</div>` : '';
   switch (e.type) {
     case 'search': return line(run ? `Recherche ${q(e.query)} dans ${where(e.folder)}…` : `Recherche ${q(e.query)} — ${e.count} résultat${e.count > 1 ? 's' : ''}`, run ? '<div class="scanbar"></div>' : top);
     case 'big': return line(run ? `Repère les plus gros fichiers de ${where(e.folder)}…` : `Plus gros fichiers de ${where(e.folder)}`, run ? '<div class="scanbar"></div>' : top);
     case 'list': return line(run ? `Ouvre et lit ${where(e.path)}…` : `Lit ${where(e.path)} — ${e.count} éléments`, run ? '<div class="scanbar"></div>' : '');
     case 'open': return line(`Affiche ${where(e.path)}`);
     case 'select': return line(`Sélectionne ${e.items.length} élément${e.items.length > 1 ? 's' : ''} · ${fmtSize(e.total)}`,
-      `<div class="asub">${e.items.slice(0, 4).map(x => esc(short(x.path))).join(' · ')}${e.items.length > 4 ? ` · +${e.items.length - 4}` : ''}</div>`);
+      `<div class="asub">${e.items.slice(0, 4).map(x => esc(rel(x.path))).join(' · ')}${e.items.length > 4 ? ` · +${e.items.length - 4}` : ''}</div>`);
     case 'trash': {
-      const list = `<div class="tlist">${e.items.slice(0, 8).map(x => `<div><span title="${esc(x.path)}">${esc(short(x.path))}</span><b>${fmtSize(x.size)}</b></div>`).join('')}
-        ${e.items.length > 8 ? `<div class="muted">+ ${e.items.length - 8} autres</div>` : ''}</div>`;
-      if (e.status === 'pending') return `<div class="act trash pending"><div class="tcard">
-          <div class="thead2"><b>Mettre à la corbeille ${e.items.length > 1 ? `${e.items.length} éléments` : 'cet élément'} ?</b><b class="tsize">${fmtSize(e.total)}</b></div>
-          ${e.reason ? `<p class="treason">${esc(e.reason)}</p>` : ''}${list}
-          <div class="tbtns"><button class="btn danger sm" data-confirm="${e.i}" data-chat="${m.chat}" data-accept="1">Mettre à la corbeille</button>
+      if (e.status === 'pending') {
+        const key = `${m.chat}:${e.i}`, off = TRASH_OFF.get(key) || new Set();
+        const rows = e.items.map(x => `<label class="titem"><input type="checkbox" data-tpick="${key}" data-path="${esc(x.path)}"${off.has(x.path) ? '' : ' checked'}>
+          <span title="${esc(x.path)}">${esc(rel(x.path))}</span><b>${fmtSize(x.size)}</b></label>`).join('');
+        return `<div class="act trash pending"><div class="tcard" data-card="${key}">
+          <div class="thead2"><b class="tcount"></b><b class="tsize"></b></div>
+          ${e.reason ? `<p class="treason">${esc(e.reason)}</p>` : ''}
+          ${e.items.length > 1 ? `<div class="ttools"><button class="linkbtn" data-tall="${key}" data-on="1">Tout cocher</button><button class="linkbtn" data-tall="${key}" data-on="0">Tout décocher</button></div>` : ''}
+          <div class="tlist">${rows}</div>
+          <div class="tbtns"><button class="btn danger sm tgo" data-confirm="${e.i}" data-chat="${m.chat}" data-accept="1"></button>
           <button class="btn sm" data-confirm="${e.i}" data-chat="${m.chat}" data-accept="0">Non</button></div></div></div>`;
+      }
       if (e.status === 'trashing') return line(`Met ${e.items.length} élément${e.items.length > 1 ? 's' : ''} à la corbeille…`, '<div class="scanbar"></div>');
-      if (e.status === 'done') return line(`${e.done} élément${e.done > 1 ? 's' : ''} à la corbeille · <b class="freed">${fmtSize(e.freed)}</b> libérés${e.failed?.length ? ` · ${e.failed.length} échec(s)` : ''}`);
+      if (e.status === 'done') return line(`${e.done} élément${e.done > 1 ? 's' : ''} à la corbeille · <b class="freed">${fmtSize(e.freed)}</b> libérés${e.kept?.length ? ` · ${e.kept.length} gardé${e.kept.length > 1 ? 's' : ''}` : ''}${e.failed?.length ? ` · ${e.failed.length} échec(s)` : ''}`);
       return line(e.status === 'refused' ? 'Suppression refusée' : 'Suppression non confirmée');
     }
   }
@@ -590,6 +599,16 @@ function applyAct(e, prev) {
     updateSelBar(); load();
     toast(`${e.done} élément${e.done > 1 ? 's' : ''} à la corbeille · <b>${fmtSize(e.freed)}</b> libérés`, 'ok');
   }
+}
+function updateTrashCard(card) {
+  const boxes = [...card.querySelectorAll('input[data-tpick]')], on = boxes.filter(b => b.checked);
+  const sizes = new Map(); for (const m of CHAT) for (const e of m.events || []) if (e.type === 'trash') for (const x of e.items) sizes.set(x.path, x.size);
+  const total = on.reduce((t, b) => t + (sizes.get(b.dataset.path) || 0), 0);
+  card.querySelector('.tcount').textContent = boxes.length > 1 ? `Mettre à la corbeille ${on.length} sur ${boxes.length} éléments ?` : 'Mettre cet élément à la corbeille ?';
+  card.querySelector('.tsize').textContent = fmtSize(total);
+  const go = card.querySelector('.tgo');
+  go.textContent = on.length > 1 ? `Mettre ${on.length} éléments à la corbeille` : 'Mettre à la corbeille';
+  go.disabled = !on.length;
 }
 const flash = el => { if (!el) return; el.classList.remove('ai-flash'); void el.offsetWidth; el.classList.add('ai-flash'); };
 function setTabSilently(tab) { S.tab = tab; for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === tab); }
@@ -694,6 +713,13 @@ async function loadProviders(refresh) {
     if (wasRunning && LOGIN?.status === 'done') { toast(`Compte ${esc(NAME[LOGIN.provider])} connecté`, 'ok'); return loadProviders(true); }
     const any = anyReady();
     $('#chatProv').innerHTML = providerOptions();
+    // Connecter un autre compte sans quitter l'assistant (« + ChatGPT » quand Claude est déjà connecté, etc.)
+    const others = any ? Object.keys(PROVS).filter(k => !ready(PROVS[k]) && NAME[k]) : [];
+    const busyLogin = LOGIN?.status === 'running' && others.includes(LOGIN.provider);
+    $('#chatAdd').innerHTML = busyLogin ? '' : others.map(k => `<button type="button" class="linkbtn" data-connect="${k}" title="Connecter aussi ton compte ${NAME[k]}">+ ${NAME[k]}</button>`).join('');
+    const cx = any && (busyLogin || (LOGIN?.status === 'error' && others.includes(LOGIN.provider)));
+    $('#chatConnect').hidden = !cx;
+    if (cx && document.activeElement?.id !== 'loginCode') $('#chatConnect').innerHTML = connectBlock(LOGIN.provider);
     $('#chatInput').disabled = !any || chatBusy; $('#chatSend').disabled = !any; $('#chatProv').hidden = !any;
     $('#chatInput').placeholder = any ? 'Pose une question sur ce dossier… (Entrée pour envoyer)' : 'Connecte un compte IA pour discuter';
     const typing = document.activeElement?.id === 'loginCode';
@@ -759,11 +785,25 @@ $('#chatForm').addEventListener('submit', e => { e.preventDefault(); chatBusy ? 
 $('#chatInput').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(e.target.value); }
 });
+$('#chatMsgs').addEventListener('change', e => {
+  const b = e.target.closest('input[data-tpick]'); if (!b) return;
+  const off = TRASH_OFF.get(b.dataset.tpick) || new Set();
+  b.checked ? off.delete(b.dataset.path) : off.add(b.dataset.path);
+  TRASH_OFF.set(b.dataset.tpick, off); updateTrashCard(b.closest('.tcard'));
+});
 $('#chatMsgs').addEventListener('click', async e => {
+  const all = e.target.closest('[data-tall]');
+  if (all) {
+    const card = all.closest('.tcard'), on = all.dataset.on === '1', off = new Set();
+    for (const b of card.querySelectorAll('input[data-tpick]')) { b.checked = on; if (!on) off.add(b.dataset.path); }
+    TRASH_OFF.set(all.dataset.tall, off); updateTrashCard(card); return;
+  }
   const c = e.target.closest('[data-confirm]');
   if (c) {
-    for (const b of c.parentElement.querySelectorAll('button')) b.disabled = true;
-    try { await post('/api/chat/confirm', { chat: c.dataset.chat, event: +c.dataset.confirm, accept: c.dataset.accept === '1' }); } catch (err) { toast(esc(err.message), 'err'); }
+    const card = c.closest('.tcard');
+    const paths = [...card.querySelectorAll('input[data-tpick]')].filter(b => b.checked).map(b => b.dataset.path);
+    for (const b of card.querySelectorAll('button, input')) b.disabled = true;
+    try { await post('/api/chat/confirm', { chat: c.dataset.chat, event: +c.dataset.confirm, accept: c.dataset.accept === '1', paths }); } catch (err) { toast(esc(err.message), 'err'); }
     return;
   }
   const q = e.target.closest('[data-q]'); if (q) return sendChat(q.dataset.q);
