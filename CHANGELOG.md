@@ -9,6 +9,12 @@ Toutes les évolutions notables de Taupe. Format inspiré de [Keep a Changelog](
 - Chaque action de l'IA s'affiche **en direct avec une animation** dans l'assistant, et l'interface réagit (dossier ouvert, lignes sélectionnées).
 - Bouton « Arrêter » pendant une réponse de l'IA.
 
+### Modifié
+- Retour du logo aux traces de pattes : icône de l'app, logo de l'en-tête et icône d'onglet.
+
+### Corrigé
+- La fenêtre s'affiche toujours au démarrage, et une erreur claire apparaît si le moteur ne répond pas.
+
 ## [1.0.0] - 2026-11-19
 
 Première version publique.

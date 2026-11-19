@@ -48,6 +48,7 @@ const ACTIONS = {
 
 function startWorker() {
   return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('le moteur ne répond pas (20 s)')), 20000);
     worker = utilityProcess.fork(path.join(DIR, 'worker.mjs'), [], {
       serviceName: 'Taupe Engine',
       execArgv: ['--max-old-space-size=8192'],
@@ -55,7 +56,7 @@ function startWorker() {
       stdio: 'inherit',
     });
     worker.on('message', async msg => {
-      if (msg?.type === 'ready') return resolve(msg.url);
+      if (msg?.type === 'ready') { clearTimeout(timeout); return resolve(msg.url); }
       if (msg?.type === 'action' && ACTIONS[msg.name]) {
         let result = null, error = null;
         try { result = await ACTIONS[msg.name](...msg.args); } catch (e) { error = e.message; }
@@ -80,6 +81,7 @@ function createWindow() {
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false },
   });
   win.once('ready-to-show', () => win.show());
+  setTimeout(() => { if (win && !win.isVisible()) win.show(); }, 4000); // filet de sécurité
   // Jamais de navigation hors de l'app : les liens externes s'ouvrent dans le navigateur
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https:\/\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith(serverUrl)) e.preventDefault(); });
