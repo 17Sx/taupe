@@ -496,3 +496,6 @@ input[type=checkbox]:disabled { opacity: .25 !important; cursor: default; }
 .cx-wait { align-items: flex-start; line-height: 1.45; }
 .cx-wait .spin { margin-top: 2px; }
 .cx-code { align-self: stretch; }
+
+/* Logo : une trace de patte orange */
+.logo-paw { width: 17px; height: 20px; fill: var(--orange); transform: rotate(18deg); flex: none; }
