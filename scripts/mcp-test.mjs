@@ -81,6 +81,18 @@ try {
     const r = await pending;
     assert.equal(r.trashed.length, 0); assert.ok(fs.existsSync(target));
   });
+  await step('confirmation partielle : seuls les éléments cochés partent', async () => {
+    const keep = mk('garder.zip', 100_000), drop = mk('jeter.zip', 100_000);
+    await api('POST', 'api/rescan', { id: (await api('GET', 'api/list')).node.id });
+    for (let i = 0; i < 100; i++) { const s = await api('GET', 'api/status'); if (!s.scan.scanning) break; await new Promise(r => setTimeout(r, 30)); }
+    const pending = tool('move_to_trash', { paths: [keep, drop], reason: 'test' });
+    let e;
+    for (let i = 0; i < 50 && !e; i++) { await new Promise(r => setTimeout(r, 30)); e = (await api('GET', `api/chat/events?chat=${chat}`)).events.filter(x => x.type === 'trash' && x.status === 'pending')[0]; }
+    await api('POST', 'api/chat/confirm', { chat, event: e.i, accept: true, paths: [drop] });
+    const r = await pending;
+    assert.deepEqual(r.trashed, [drop]); assert.deepEqual(r.kept_by_user, [keep]);
+    assert.ok(fs.existsSync(keep)); assert.ok(!fs.existsSync(drop));
+  });
   await step('chemin protégé refusé', async () => {
     const r = await tool('move_to_trash', { paths: [os.homedir()], reason: 'test' });
     assert.equal(r.trashed.length, 0);

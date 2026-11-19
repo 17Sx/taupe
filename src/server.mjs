@@ -132,10 +132,14 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
       clearTimeout(timer);
       c.pending.delete(e.i);
       if (!accept) { e.status = accept === null ? 'expired' : 'refused'; return { trashed: [], message: accept === null ? 'Pas de réponse de l’utilisateur.' : 'L’utilisateur a refusé.' }; }
-      e.status = 'trashing';
-      const r = await trashItems(ok.filter(x => session.valid(x.id) && session.pathOf(x.id) === x.path));
+      // l'utilisateur a pu décocher certains éléments avant de confirmer
+      const chosen = accept.paths ? ok.filter(x => accept.paths.includes(x.path)) : ok;
+      const kept = ok.filter(x => !chosen.includes(x)).map(x => x.path);
+      if (!chosen.length) { e.status = 'refused'; return { trashed: [], kept, message: 'L’utilisateur a tout décoché.' }; }
+      Object.assign(e, { status: 'trashing', chosen: chosen.length, kept });
+      const r = await trashItems(chosen.filter(x => session.valid(x.id) && session.pathOf(x.id) === x.path));
       Object.assign(e, { status: 'done', freed: r.freed, done: r.done.length, failed: r.failed.map(f => ({ path: f.path, error: f.error })) });
-      return { trashed: r.done.map(x => x.path), failed: e.failed, freed_bytes: r.freed, protected: e.protected };
+      return { trashed: r.done.map(x => x.path), kept_by_user: kept, failed: e.failed, freed_bytes: r.freed, protected: e.protected };
     },
   };
 
@@ -149,7 +153,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
     await pause(400);
     await TOOL_IMPL.select_items(c, { paths: s.results.slice(0, 3).map(r => r.path) });
     await pause(700);
-    const t = await TOOL_IMPL.move_to_trash(c, { paths: s.results.slice(0, 2).map(r => r.path), reason: 'Dépendances npm : un « npm install » les recrée.' });
+    const t = await TOOL_IMPL.move_to_trash(c, { paths: s.results.map(r => r.path), reason: 'Dépendances npm : un « npm install » les recrée.' });
     return t.trashed?.length ? `J’ai mis ${t.trashed.length} dossiers \`node_modules\` à la corbeille.` : 'D’accord, je n’ai rien supprimé.';
   }
 
@@ -219,7 +223,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
     'POST /api/chat/confirm': b => {
       const c = chats.get(b.chat), r = c?.pending.get(Number(b.event));
       if (!r) throw new HttpError(404, 'Plus rien à confirmer');
-      r(!!b.accept); return { ok: true };
+      r(b.accept ? { paths: Array.isArray(b.paths) ? b.paths.map(String) : null } : false); return { ok: true };
     },
     'POST /api/chat/cancel': b => {
       const c = chats.get(b.chat);
