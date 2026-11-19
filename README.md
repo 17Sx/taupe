@@ -49,12 +49,17 @@ Télécharge la dernière version sur la page **[Releases](https://github.com/17
 
 Taupe utilise **ton abonnement**, pas une clé API. Il passe par les outils officiels en ligne de commande :
 
-| Fournisseur | Outil | Connexion |
-|---|---|---|
-| Claude (Pro / Max) | [Claude Code](https://docs.claude.com/en/docs/claude-code/setup) | depuis Taupe : **⚙︎ Comptes IA → Se connecter** |
-| ChatGPT (Plus / Pro) | [Codex CLI](https://github.com/openai/codex) | depuis Taupe : **⚙︎ Comptes IA → Se connecter** |
+| Fournisseur | Outil officiel utilisé |
+|---|---|
+| Claude (Pro / Max) | [Claude Code](https://docs.claude.com/en/docs/claude-code/setup) |
+| ChatGPT (Plus / Pro) | [Codex CLI](https://github.com/openai/codex) |
 
-La fenêtre **Comptes IA** indique si chaque outil est installé et connecté, ouvre la page de connexion officielle et donne la commande d'installation si besoin.
+Clique sur **Continuer avec Claude** ou **Continuer avec ChatGPT** dans l'assistant :
+- si l'outil n'est pas installé, Taupe l'installe automatiquement avec l'installeur officiel ;
+- la page de connexion s'ouvre dans ton navigateur ;
+- pour Claude, copie le code affiché à la fin : Taupe le détecte tout seul quand tu reviens dans l'app.
+
+Le bouton **Comptes**, en haut de l'assistant, affiche l'état des connexions et permet de se déconnecter.
 
 **Confidentialité** : l'IA reçoit uniquement des **chemins, tailles et dates**, jamais le contenu de tes fichiers. Elle ne peut rien supprimer : c'est toujours toi qui coches puis confirmes.
 

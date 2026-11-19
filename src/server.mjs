@@ -68,7 +68,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
 
     // ----- IA : comptes -----
     'GET /api/ai': async (_, q) => ({ job: aiView(), providers: await ai.statusAll(q.get('refresh') === '1'), labels: ai.PROVIDERS, login: ai.loginState() }),
-    'POST /api/ai/login': async b => { await ai.login(b.provider, actions.openExternal); return { ok: true }; },
+    'POST /api/ai/connect': b => { ai.connect(b.provider); return { ok: true }; },
     'POST /api/ai/login/code': b => { ai.loginCode(String(b.code || '')); return { ok: true }; },
     'POST /api/ai/login/cancel': () => { ai.loginCancel(); return { ok: true }; },
     'POST /api/ai/logout': async b => { await ai.logout(b.provider); return { ok: true }; },
