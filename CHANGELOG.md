@@ -4,6 +4,12 @@ Toutes les évolutions notables de Taupe. Format inspiré de [Keep a Changelog](
 
 ## [Non publié]
 
+### Modifié
+- Retour du logo aux traces de pattes : icône de l'app, logo de l'en-tête et icône d'onglet.
+
+### Corrigé
+- La fenêtre s'affiche toujours au démarrage, et une erreur claire apparaît si le moteur ne répond pas.
+
 ## [1.0.0] - 2026-11-19
 
 Première version publique.
