@@ -1,52 +1,107 @@
-# 🐾 Taupe
+<p align="center">
+  <img src="build/icon.png" width="112" alt="Taupe">
+</p>
 
-Explorateur d'espace disque rapide pour macOS. Zéro dépendance, il faut seulement Node ≥ 20.
+<h1 align="center">Taupe</h1>
 
-## Lancer
+<p align="center">
+  <b>Où est passé ton espace disque ?</b><br>
+  Explorateur d'espace disque rapide pour <b>macOS</b> et <b>Windows</b>, avec un assistant IA qui connaît tes dossiers.
+</p>
 
-Double-clique sur `start.command` dans le Finder, ou :
+<p align="center">
+  <a href="https://github.com/17Sx/taupe/releases/latest">Télécharger</a> ·
+  <a href="#fonctionnalités">Fonctionnalités</a> ·
+  <a href="#ia-claude--chatgpt">IA</a> ·
+  <a href="#développement">Développement</a> ·
+  <a href="#english">English</a>
+</p>
 
-```bash
-npm start
-```
+---
 
-La page s'ouvre sur http://127.0.0.1:4747.
+## Fonctionnalités
 
-## Ce que ça fait
+- **Scan ultra-rapide** : environ 120 000 fichiers/s, avec un affichage qui se met à jour pendant l'analyse.
+- **Liste + treemap** : vois d'un coup d'œil ce qui prend de la place, puis descends dans les dossiers au clavier.
+- **Gros fichiers**, **répartition par type**, dossiers **nettoyables** (caches, `node_modules`, DerivedData, `%TEMP%`…).
+- **Suggestions** automatiques avec un niveau de risque : caches de build, dépendances de projets dormants, vieux installeurs, doublons, worktrees…
+- **Assistant IA** dans un panneau latéral. Il connaît le dossier affiché, et ses réponses contiennent des chemins cliquables.
+- **Suppression sûre** : tout part à la **Corbeille** (macOS / Windows) après confirmation. Les dossiers système sont protégés.
+- **100 % local** : aucune donnée n'est envoyée, sauf à l'IA si tu l'utilises (structure uniquement, voir ci-dessous).
 
-- **Contenu** : liste triée par taille + treemap cliquable du dossier courant. Ça se met à jour en direct pendant le scan.
-- **Gros fichiers** : les 300 plus gros fichiers du dossier et de tous ses sous-dossiers.
-- **Par type** : vidéos, images, archives, apps, dépendances dev… et le détail par extension.
-- **Nettoyable** : `node_modules`, `.next`, caches, DerivedData, simulateurs, Corbeille, etc.
-- **Suppression** : tout part à la **Corbeille** (`/usr/bin/trash`) après confirmation. Les dossiers système et les dossiers principaux sont protégés.
+## Installer
 
-## IA (avec ton abonnement Claude ou ChatGPT)
+Télécharge la dernière version sur la page **[Releases](https://github.com/17Sx/taupe/releases/latest)** :
 
-Taupe appelle les CLI installées sur ton Mac, donc pas de clé API ni de facturation à l'usage :
-- **Claude** → CLI `claude` (Claude Code). Connecte-toi avec `claude` puis `/login`.
-- **ChatGPT** → CLI `codex`. Connecte-toi avec `codex login`.
+| Système | Fichier |
+|---|---|
+| macOS Apple Silicon (M1–M4) | `Taupe-x.y.z-mac-arm64.dmg` |
+| macOS Intel | `Taupe-x.y.z-mac-x64.dmg` |
+| Windows 10/11 (installeur) | `Taupe-x.y.z-win-x64-setup.exe` |
+| Windows (portable, sans installation) | `Taupe-x.y.z-win-x64-portable.exe` |
 
-Fonctions :
-- **✨ Suggestions** : règles automatiques instantanées (caches de build, `node_modules` dormants, worktrees, vieux installeurs, doublons…) + un bouton **Analyse IA** qui renvoie une liste triée avec un niveau de risque.
-- **💬 Chat** (panneau de gauche) : pose des questions sur le dossier affiché. L'assistant connaît ce dossier, ses sous-dossiers, ses gros fichiers et ta sélection. Les chemins dans ses réponses sont cliquables.
+> **macOS** : l'app n'est pas encore signée par un certificat Apple Developer. Au premier lancement, fais clic droit → **Ouvrir**, ou lance `xattr -cr /Applications/Taupe.app` dans le Terminal.
+> Pour tout analyser (Mail, Photos…), donne l'**Accès complet au disque** à Taupe : Réglages Système → Confidentialité et sécurité.
+>
+> **Windows** : si SmartScreen s'affiche, choisis **Informations complémentaires → Exécuter quand même**.
 
-L'IA ne reçoit que la structure : noms, tailles et dates. Jamais le contenu des fichiers. Elle ne peut rien supprimer : c'est toujours toi qui coches et confirmes.
+## IA (Claude / ChatGPT)
+
+Taupe utilise **ton abonnement**, pas une clé API. Il passe par les outils officiels en ligne de commande :
+
+| Fournisseur | Outil | Connexion |
+|---|---|---|
+| Claude (Pro / Max) | [Claude Code](https://docs.claude.com/en/docs/claude-code/setup) | depuis Taupe : **⚙︎ Comptes IA → Se connecter** |
+| ChatGPT (Plus / Pro) | [Codex CLI](https://github.com/openai/codex) | depuis Taupe : **⚙︎ Comptes IA → Se connecter** |
+
+La fenêtre **Comptes IA** indique si chaque outil est installé et connecté, ouvre la page de connexion officielle et donne la commande d'installation si besoin.
+
+**Confidentialité** : l'IA reçoit uniquement des **chemins, tailles et dates**, jamais le contenu de tes fichiers. Elle ne peut rien supprimer : c'est toujours toi qui coches puis confirmes.
 
 ## Raccourcis
 
-| Touche | Action |
-|---|---|
-| ↑ ↓ | naviguer |
-| → / Entrée | ouvrir le dossier |
-| ← / ⌫ | dossier parent |
-| Espace | aperçu (Quick Look) |
-| ⌘clic / ⇧clic | sélectionner |
-| ⌘A | tout sélectionner |
-| ⌘⌫ | mettre à la corbeille |
-| / | filtrer |
+| Action | macOS | Windows |
+|---|---|---|
+| Naviguer / ouvrir / remonter | ↑ ↓ / → / ← | ↑ ↓ / → / ← |
+| Aperçu | Espace (Quick Look) | Espace |
+| Sélectionner | ⌘clic, ⇧clic, ⌘A | Ctrl+clic, ⇧clic, Ctrl+A |
+| Mettre à la corbeille | ⌘⌫ | Suppr |
+| Analyser un dossier | ⌘O | Ctrl+O |
+| Afficher l'assistant | ⌘J | Ctrl+J |
 
-## Astuces
+## Développement
 
-- Les tailles sont celles **réellement occupées sur disque** (comme `du`), avec les hard links comptés une seule fois.
-- Pour tout voir (Mail, Messages, Photos…), donne l'**Accès complet au disque** à ton Terminal : Réglages Système → Confidentialité et sécurité → Accès complet au disque.
-- Le serveur n'écoute que sur `127.0.0.1` et exige un jeton secret injecté dans la page : un site web ne peut donc pas déclencher de suppression.
+Il faut Node.js 20 ou plus récent.
+
+```bash
+npm install
+npm start            # lance l'application (Electron)
+npm test             # tests du moteur
+npm run check        # vérification de syntaxe
+npm run dist:mac     # construit le .dmg (sur macOS)
+npm run dist:win     # construit l'installeur .exe (sur Windows)
+```
+
+Architecture :
+
+```
+electron/main.mjs    fenêtre, menus, actions natives (corbeille, Finder/Explorateur, Quick Look)
+electron/worker.mjs  processus « moteur » séparé (le scan ne bloque jamais l'interface)
+src/scanner.mjs      scan parallèle + arbre compact en mémoire (typed arrays)
+src/server.mjs       API locale 127.0.0.1 protégée par jeton
+src/ai.mjs           Claude Code / Codex : chat, analyse, connexion des comptes
+src/platform.mjs     tout ce qui dépend de macOS / Windows / Linux
+public/              interface (HTML/CSS/JS sans framework)
+```
+
+Branches : `main` = versions publiées, `develop` = intégration, `feat/*` / `fix/*` = travail en cours. Voir [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Pour publier une version : mets à jour `CHANGELOG.md` et la version dans `package.json`, fusionne `develop` dans `main`, puis pousse un tag `vX.Y.Z`. GitHub Actions construit les installeurs et crée la release.
+
+## English
+
+**Taupe** is a fast disk-space explorer for macOS and Windows: live scanning, list + treemap, big files, file types, cleanup suggestions, and safe deletion to the Trash/Recycle Bin. It also includes a side-panel AI assistant that uses your **own Claude or ChatGPT subscription** through the official CLIs (Claude Code / Codex). Only file paths, sizes and dates are shared with the AI, never file contents. The UI is in French for now; contributions for translations are welcome.
+
+## Licence
+
+[MIT](LICENSE) © 2026 17Sx
