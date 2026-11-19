@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="token" content="__TOKEN__">
+  <title>Taupe</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐾</text></svg>">
+</head>
+<body>
+  <header class="top">
+    <a class="logo" id="logo" href="#" title="Retour à la racine du scan">🐾 <b>Taupe</b></a>
+    <form id="scanForm" class="scanform">
+      <input id="pathInput" spellcheck="false" autocomplete="off" placeholder="Chemin à analyser (~, /, ~/Documents…)">
+      <button class="btn primary" type="submit">Analyser</button>
+    </form>
+    <div class="vol" id="vol"></div>
+    <button class="btn ghost sm" id="chatToggle" title="Afficher / masquer l’assistant IA">💬 Chat</button>
+  </header>
+
+  <div class="progress" id="progress" hidden>
+    <div class="pbar"><i></i></div>
+    <span id="progText"></span>
+    <button class="btn ghost sm" id="cancelBtn">Arrêter</button>
+  </div>
+
+  <div class="workspace">
+  <aside class="chat" id="chat" hidden>
+    <div class="chathead">
+      <b>💬 Assistant</b>
+      <span class="chatctx" id="chatCtx"></span>
+      <button class="iconbtn" id="chatClear" title="Nouvelle conversation">↺</button>
+      <button class="iconbtn" id="chatClose" title="Masquer le chat">×</button>
+    </div>
+    <div class="chatmsgs" id="chatMsgs"></div>
+    <form class="chatform" id="chatForm">
+      <textarea id="chatInput" rows="2" placeholder="Pose une question sur ce dossier… (Entrée pour envoyer)"></textarea>
+      <div class="chatbar">
+        <select id="chatProv" title="Modèle utilisé (ton abonnement)"></select>
+        <span class="grow"></span>
+        <button class="btn primary sm" id="chatSend" type="submit">Envoyer</button>
+      </div>
+    </form>
+  </aside>
+
+  <main id="welcome" class="welcome" hidden>
+    <h1>Où est passé ton espace disque&nbsp;?</h1>
+    <p class="muted">Choisis quoi analyser. Rien n’est supprimé sans ta confirmation, et tout part à la Corbeille.</p>
+    <div class="cards">
+      <button class="card" data-path="~"><span>🏠</span><b>Dossier perso</b><small>~ — le plus utile</small></button>
+      <button class="card" data-path="/"><span>💻</span><b>Disque entier</b><small>/ — tout le Mac</small></button>
+      <button class="card" data-path="/Applications"><span>🧩</span><b>Applications</b><small>/Applications</small></button>
+      <button class="card" data-path="~/Downloads"><span>⬇️</span><b>Téléchargements</b><small>~/Downloads</small></button>
+    </div>
+    <p class="hint">💡 Pour tout voir (Mail, Messages, Photos…), donne l’<b>Accès complet au disque</b> à ton Terminal :
+      Réglages Système → Confidentialité et sécurité → Accès complet au disque.</p>
+  </main>
+
+  <main id="app" class="app" hidden>
+    <div class="toolbar">
+      <nav class="crumbs" id="crumbs"></nav>
+      <div class="actions">
+        <button class="btn ghost sm" id="upBtn" title="Dossier parent (←)">↑ Parent</button>
+        <button class="btn ghost sm" id="rescanBtn" title="Re-scanner ce dossier">↻ Rescanner</button>
+        <button class="btn ghost sm" id="finderBtn" title="Ouvrir dans le Finder">Finder</button>
+      </div>
+    </div>
+    <div class="summary">
+      <div>
+        <h2 id="curName"></h2>
+        <div class="muted" id="curMeta"></div>
+      </div>
+      <div class="tabs" id="tabs">
+        <button data-tab="content" class="on">Contenu</button>
+        <button data-tab="suggest">✨ Suggestions</button>
+        <button data-tab="big">Gros fichiers</button>
+        <button data-tab="types">Par type</button>
+        <button data-tab="hogs">Nettoyable</button>
+      </div>
+    </div>
+
+    <div class="split" id="split">
+      <section class="listwrap">
+        <div class="listtools">
+          <input id="filter" placeholder="Filtrer par nom…" spellcheck="false">
+          <span class="muted small" id="listInfo"></span>
+          <span class="keyhint">↑↓ naviguer · → ouvrir · ← remonter · Espace aperçu · ⌘/⇧clic sélection · ⌘⌫ corbeille</span>
+        </div>
+        <div class="thead" id="thead"></div>
+        <div class="list" id="list" tabindex="0"></div>
+      </section>
+      <section class="tmwrap" id="tmwrap">
+        <div class="tm" id="tm"></div>
+      </section>
+    </div>
+    <section class="types" id="typesView" hidden></section>
+    <section class="suggest" id="suggestView" hidden>
+      <div class="aipanel" id="aiPanel"></div>
+      <div id="ruleGroups"></div>
+    </section>
+  </main>
+  </div>
+
+  <footer class="selbar" id="selbar" hidden>
+    <span id="selText"></span>
+    <span class="grow"></span>
+    <button class="btn ghost sm" id="selClear">Tout désélectionner</button>
+    <button class="btn danger" id="trashBtn">🗑 Mettre à la corbeille <kbd>⌘⌫</kbd></button>
+  </footer>
+
+  <div class="modal" id="modal" hidden>
+    <div class="dialog">
+      <h3 id="mTitle"></h3>
+      <div class="mlist" id="mList"></div>
+      <p class="muted small">Les éléments vont dans la Corbeille : tu peux encore les récupérer. L’espace n’est vraiment libéré qu’une fois la Corbeille vidée.</p>
+      <div class="mbtns">
+        <button class="btn ghost" id="mCancel">Annuler</button>
+        <button class="btn danger" id="mOk">Mettre à la corbeille</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip" id="tip" hidden></div>
+  <div class="toasts" id="toasts"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

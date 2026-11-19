@@ -1,0 +1,11 @@
+{
+  "name": "taupe",
+  "version": "1.0.0",
+  "description": "Explorateur d'espace disque rapide pour macOS",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "UV_THREADPOOL_SIZE=32 node --max-old-space-size=8192 server.mjs"
+  },
+  "engines": { "node": ">=20" }
+}
