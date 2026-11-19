@@ -47,19 +47,32 @@ for (const [e, list] of Object.entries({
   '📕': 'pdf epub', '📝': 'doc docx pages txt md rtf odt', '📊': 'xls xlsx numbers csv ods', '📽️': 'ppt pptx key', '🗄️': 'db sqlite sqlite3 realm', '📜': 'log',
   '⚙️': 'js mjs cjs ts tsx jsx json py rb go rs swift java kt c h cpp m cs php html css scss vue svelte sh yml yaml toml lock sql',
 })) for (const x of list.split(' ')) EMOJI[x] = e;
+// Icônes au trait fin (16×16, trait 1.15) — tout en currentColor
 const SVG = {
-  dir: '<path d="M1.5 4a1 1 0 0 1 1-1h3.7l1.5 1.6h5.8a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z" fill="currentColor"/>',
-  file: '<path d="M4 1.75h5.25L12.5 5v9.25H4z M9.25 1.75V5h3.25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>',
-  pkg: '<rect x="2.5" y="2.5" width="11" height="11" rx="3" fill="currentColor"/><rect x="5.5" y="5.5" width="5" height="5" rx="1" fill="var(--bg)"/>',
-  lock: '<rect x="3" y="7" width="10" height="7" rx="1.6" fill="currentColor"/><path d="M5.2 7V5.2a2.8 2.8 0 0 1 5.6 0V7" fill="none" stroke="currentColor" stroke-width="1.4"/>',
-  link: '<path d="M6.5 9.5l4-4M7.5 5.5h3v3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>',
-  disk: '<rect x="1.5" y="4" width="13" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="11.3" cy="8" r="1.1" fill="currentColor"/>',
-  home: '<path d="M2 7.5L8 2.5l6 5V14H10V10H6v4H2z" fill="currentColor"/>',
-  apps: '<rect x="2" y="2" width="5" height="5" rx="1.4" fill="currentColor"/><rect x="9" y="2" width="5" height="5" rx="1.4" fill="currentColor"/><rect x="2" y="9" width="5" height="5" rx="1.4" fill="currentColor"/><rect x="9" y="9" width="5" height="5" rx="1.4" fill="currentColor" opacity=".45"/>',
-  download: '<path d="M8 2v8M4.5 6.8L8 10.3l3.5-3.5M2.5 13.5h11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
-  pick: '<path d="M1.5 4a1 1 0 0 1 1-1h3.7l1.5 1.6h5.8a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 6.5v4M6 8.5h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+  dir: '<path d="M1.75 4.5c0-.55.45-1 1-1h3.4l1.35 1.4h5.75c.55 0 1 .45 1 1v6.35c0 .55-.45 1-1 1H2.75c-.55 0-1-.45-1-1z"/>',
+  file: '<path d="M4.25 1.75h4.9l2.6 2.6v9.9H4.25z"/><path d="M9.15 1.75v2.6h2.6"/>',
+  pkg: '<rect x="2.25" y="2.25" width="11.5" height="11.5" rx="3"/><rect x="5.75" y="5.75" width="4.5" height="4.5" rx="1"/>',
+  lock: '<rect x="3.25" y="7" width="9.5" height="6.75" rx="1.5"/><path d="M5.25 7V5.1a2.75 2.75 0 0 1 5.5 0V7"/>',
+  link: '<rect x="2.25" y="2.25" width="11.5" height="11.5" rx="3"/><path d="M6.25 9.75l3.5-3.5M7 6.25h2.75V9"/>',
+  disk: '<rect x="1.75" y="4.25" width="12.5" height="7.5" rx="2"/><path d="M4.5 8h4.5"/><circle cx="11.5" cy="8" r=".6"/>',
+  home: '<path d="M2.5 7.1L8 2.75l5.5 4.35v6.15c0 .3-.2.5-.5.5H9.75V9.9h-3.5v3.85H3c-.3 0-.5-.2-.5-.5z"/>',
+  apps: '<rect x="2.25" y="2.25" width="4.75" height="4.75" rx="1.3"/><rect x="9" y="2.25" width="4.75" height="4.75" rx="1.3"/><rect x="2.25" y="9" width="4.75" height="4.75" rx="1.3"/><rect x="9" y="9" width="4.75" height="4.75" rx="1.3" stroke-dasharray="1.6 1.4"/>',
+  download: '<path d="M8 2.25v7.5M4.9 6.9L8 10l3.1-3.1M2.75 13.5h10.5"/>',
+  pick: '<path d="M1.75 4.5c0-.55.45-1 1-1h3.4l1.35 1.4h5.75c.55 0 1 .45 1 1v6.35c0 .55-.45 1-1 1H2.75c-.55 0-1-.45-1-1z"/><path d="M8 7.25v3.5M6.25 9h3.5"/>',
+  up: '<path d="M8 13V3.5M4.25 7.25L8 3.5l3.75 3.75"/>',
+  refresh: '<path d="M13.25 8a5.25 5.25 0 1 1-1.55-3.7"/><path d="M11.9 1.9v2.6H9.3"/>',
+  reveal: '<path d="M9.5 2.5h4v4M13.5 2.5L8 8"/><path d="M11.5 9.5v3.25c0 .4-.35.75-.75.75h-7.5a.75.75 0 0 1-.75-.75v-7.5c0-.4.35-.75.75-.75H6.5"/>',
+  eye: '<path d="M1.75 8S4 3.75 8 3.75 14.25 8 14.25 8 12 12.25 8 12.25 1.75 8 1.75 8z"/><circle cx="8" cy="8" r="1.9"/>',
+  chevron: '<path d="M6.25 3.75L10.5 8l-4.25 4.25"/>',
+  chat: '<path d="M2.25 3.75c0-.55.45-1 1-1h9.5c.55 0 1 .45 1 1v6.5c0 .55-.45 1-1 1H7l-3 2.25v-2.25h-.75c-.55 0-1-.45-1-1z"/>',
+  gear: '<circle cx="8" cy="8" r="2"/><path d="M8 1.75v1.6M8 12.65v1.6M14.25 8h-1.6M3.35 8h-1.6M12.4 3.6l-1.15 1.15M4.75 11.25L3.6 12.4M12.4 12.4l-1.15-1.15M4.75 4.75L3.6 3.6"/>',
+  reset: '<path d="M2.75 8a5.25 5.25 0 1 0 1.55-3.7"/><path d="M4.1 1.9v2.6h2.6"/>',
+  close: '<path d="M4 4l8 8M12 4l-8 8"/>',
+  sparkle: '<path d="M8 1.75l1.4 4.85L14.25 8 9.4 9.4 8 14.25 6.6 9.4 1.75 8 6.6 6.6z"/>',
+  trash: '<path d="M2.75 4.25h10.5M6.25 4.25V2.75h3.5v1.5M4 4.25l.65 9.25h6.7L12 4.25"/>',
+  search: '<circle cx="7" cy="7" r="4.25"/><path d="M10.25 10.25l3.5 3.5"/>',
 };
-const svg = k => `<svg viewBox="0 0 16 16" aria-hidden="true">${SVG[k] || SVG.file}</svg>`;
+const svg = k => `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[k] || SVG.file}</svg>`;
 function iconKey(r) {
   if (r.dir) return r.err ? 'lock' : r.skip ? 'disk' : r.pkg ? 'pkg' : 'dir';
   return r.link ? 'link' : 'file';
@@ -119,7 +132,7 @@ const COLS = [['', ''], ['name', 'Nom'], ['size', 'Taille'], ['pct', '%'], ['cou
 function renderThead() {
   $('#thead').innerHTML = COLS.map(([k, l], i) => {
     if (!k) return '<span></span>';
-    const arrow = S.sort.k === k || (k === 'pct' && S.sort.k === 'size') ? (S.sort.d < 0 ? ' ↓' : ' ↑') : '';
+    const arrow = S.sort.k === k ? (S.sort.d < 0 ? ' ↓' : ' ↑') : '';
     return `<span data-k="${k === 'pct' ? 'size' : k}" class="${i >= 2 ? 'r' : ''} col-${k}">${l}${arrow}</span>`;
   }).join('');
 }
@@ -158,7 +171,7 @@ function renderList(opts = {}) {
     html += `<div class="row${r.dir ? ' dir' : ''}${sel ? ' sel' : ''}${tall ? ' tall' : ''}" data-i="${i}"${r.tip ? ` title="${esc(r.tip)}"` : ''}>
       <span><input type="checkbox"${sel ? ' checked' : ''}></span>
       <span class="nm"><span class="ic ${iconCls(r)}">${icon(r)}</span><span class="t">${esc(r.name)}${sub ? `<small>${sub}</small>` : ''}</span>${tags}
-        <span class="ra"><button data-a="ql" title="Aperçu (Espace)">👁</button><button data-a="reveal" title="Afficher dans le ${FM}">${FM}</button>${r.dir && !r.skip ? '<button data-a="go" title="Ouvrir (→)">Ouvrir</button>' : ''}</span></span>
+        <span class="ra"><button data-a="ql" title="Aperçu (Espace)">${svg('eye')}</button><button data-a="reveal" title="Afficher dans le ${FM}">${svg('reveal')}</button>${r.dir && !r.skip ? `<button data-a="go" title="Ouvrir (→)">${svg('chevron')}</button>` : ''}</span></span>
       <span class="sz"><span class="bar"><i style="width:${Math.max(barW, 0.3).toFixed(2)}%"></i></span><b>${fmtSize(r.size)}</b></span>
       <span class="pc r col-pc">${fmtPct(pct(r.size, parent))}</span>
       <span class="ct r col-ct">${r.dir ? nf.format(r.count) : ''}</span>
@@ -343,7 +356,7 @@ function sugItem(it, { extra = '', noSel = false } = {}) {
       <div class="spath" title="${esc(it.path)}">${esc(pretty(it.path))}${it.note ? ` <span class="muted">· ${esc(it.note)}</span>` : ''}</div>
       ${extra}
     </div>
-    <span class="sacts"><button data-a="reveal" title="Afficher dans le ${FM}">${FM}</button>${it.dir ? '<button data-a="go" title="Ouvrir dans Taupe">Voir</button>' : ''}</span>
+    <span class="sacts"><button data-a="reveal" title="Afficher dans le ${FM}">${svg('reveal')}</button>${it.dir ? `<button data-a="go" title="Ouvrir dans Taupe">${svg('chevron')}</button>` : ''}</span>
     <b class="ssize">${fmtSize(it.size)}</b>
   </div>`;
 }
@@ -392,7 +405,7 @@ function renderAI(st) {
   } else {
     body = `<p class="muted small">L’IA voit les noms, tailles et dates des éléments les plus lourds — <b>jamais le contenu de tes fichiers</b> — et propose quoi supprimer, avec le niveau de risque. Rien n’est supprimé sans toi.</p>`;
   }
-  $('#aiPanel').innerHTML = `<div class="aihead"><h2 class="stitle">Analyse IA</h2><span class="grow"></span>
+  $('#aiPanel').innerHTML = `<div class="aihead"><h2 class="stitle">${svg('sparkle')} Analyse IA</h2><span class="grow"></span>
       <select id="aiProv"${running ? ' disabled' : ''}>${opts}</select>
       <button class="btn ghost sm" data-accounts>Comptes IA</button>
       <button class="btn primary sm" id="aiStart"${running || !Object.values(PROVS).some(ready) ? ' disabled' : ''}>${j.status === 'done' ? 'Relancer' : 'Analyser ce dossier'}</button></div>${body}`;
@@ -432,6 +445,7 @@ function selItems() {
 function updateSelBar() {
   const items = selItems();
   $('#selbar').hidden = !items.length;
+  document.body.classList.toggle('has-sel', items.length > 0);
   const total = items.reduce((a, b) => a + b.size, 0);
   $('#selText').innerHTML = `<b>${items.length}</b> élément${items.length > 1 ? 's' : ''} sélectionné${items.length > 1 ? 's' : ''} · <b>${fmtSize(total)}</b>`;
 }
@@ -680,8 +694,8 @@ async function pickFolder() {
   if (!IS_APP) return $('#pathInput').focus();
   try { const r = await post('/api/pick'); if (r.path) { $('#pathInput').value = pretty(r.path); startScan(r.path); } } catch (e) { toast(esc(e.message), 'err'); }
 }
-const HINT = IS_MAC ? `💡 Pour tout voir (Mail, Messages, Photos…), donne l’<b>Accès complet au disque</b> à ${IS_APP ? 'Taupe' : 'ton Terminal'} : Réglages Système → Confidentialité et sécurité → Accès complet au disque.`
-  : IS_WIN ? '💡 Certains dossiers système demandent les droits administrateur : clic droit sur Taupe → <b>Exécuter en tant qu’administrateur</b> pour tout voir.' : '';
+const HINT = IS_MAC ? `Pour tout voir (Mail, Messages, Photos…), donne l’<b>Accès complet au disque</b> à ${IS_APP ? 'Taupe' : 'ton Terminal'} : Réglages Système → Confidentialité et sécurité → Accès complet au disque.`
+  : IS_WIN ? 'Certains dossiers système demandent les droits administrateur : clic droit sur Taupe → <b>Exécuter en tant qu’administrateur</b> pour tout voir.' : '';
 function renderWelcome(st) {
   const cards = (st.places || []).map(p => `<button class="card" data-path="${esc(p.path)}"><span class="pi">${svg(p.icon)}</span><b>${esc(p.label)}</b><small>${esc(p.hint)}</small></button>`);
   if (IS_APP) cards.push('<button class="card" data-pick="1"><span class="pi">' + svg('pick') + '</span><b>Choisir un dossier…</b><small>' + MOD + 'O</small></button>');
@@ -689,8 +703,9 @@ function renderWelcome(st) {
   $('#hint').innerHTML = HINT;
 }
 function applyPlatformLabels() {
-  $('#finderBtn').textContent = FM; $('#finderBtn').title = `Ouvrir dans le ${FM}`;
-  $('#trashBtn').innerHTML = `🗑 Mettre à la corbeille <kbd>${TRASH_KEY}</kbd>`;
+  for (const el of document.querySelectorAll('[data-icon]')) el.insertAdjacentHTML('afterbegin', svg(el.dataset.icon));
+  $('#finderBtn').lastChild.textContent = FM; $('#finderBtn').title = `Ouvrir dans le ${FM}`;
+  $('#trashBtn').innerHTML = `${svg('trash')} Mettre à la corbeille <kbd>${TRASH_KEY}</kbd>`;
   $('.keyhint').textContent = `↑↓ naviguer · → ouvrir · ← remonter · Espace aperçu · ${IS_MAC ? '⌘' : 'Ctrl'}/⇧clic sélection · ${TRASH_KEY} corbeille`;
   $('#pickBtn').hidden = !IS_APP;
 }

@@ -17,7 +17,7 @@
       <button class="btn primary" type="submit">Analyser</button>
     </form>
     <div class="vol" id="vol"></div>
-    <button class="btn ghost sm" id="chatToggle" title="Afficher / masquer l’assistant IA">Assistant</button>
+    <button class="btn ghost sm" id="chatToggle" data-icon="chat" title="Afficher / masquer l’assistant IA">Assistant</button>
   </header>
 
   <div class="progress" id="progress" hidden>
@@ -31,9 +31,9 @@
     <div class="chathead">
       <b>Assistant</b>
       <span class="chatctx" id="chatCtx"></span>
-      <button class="iconbtn" data-accounts title="Comptes IA (Claude / ChatGPT)">⚙︎</button>
-      <button class="iconbtn" id="chatClear" title="Nouvelle conversation">↺</button>
-      <button class="iconbtn" id="chatClose" title="Masquer le chat">×</button>
+      <button class="iconbtn" data-accounts data-icon="gear" title="Comptes IA (Claude / ChatGPT)"></button>
+      <button class="iconbtn" id="chatClear" data-icon="reset" title="Nouvelle conversation"></button>
+      <button class="iconbtn" id="chatClose" data-icon="close" title="Masquer l’assistant"></button>
     </div>
     <div class="chatmsgs" id="chatMsgs"></div>
     <form class="chatform" id="chatForm">
@@ -57,9 +57,9 @@
     <div class="toolbar">
       <nav class="crumbs" id="crumbs"></nav>
       <div class="actions">
-        <button class="btn ghost sm" id="upBtn" title="Dossier parent (←)">↑ Parent</button>
-        <button class="btn ghost sm" id="rescanBtn" title="Re-scanner ce dossier">↻ Rescanner</button>
-        <button class="btn ghost sm" id="finderBtn" title="Ouvrir dans le Finder">Finder</button>
+        <button class="btn ghost sm" id="upBtn" data-icon="up" title="Dossier parent (←)">Parent</button>
+        <button class="btn ghost sm" id="rescanBtn" data-icon="refresh" title="Re-scanner ce dossier">Rescanner</button>
+        <button class="btn ghost sm" id="finderBtn" data-icon="reveal" title="Ouvrir dans le Finder">Finder</button>
       </div>
     </div>
     <div class="summary">

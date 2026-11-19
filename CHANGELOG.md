@@ -15,4 +15,4 @@ Première version publique.
 - **Assistant IA** contextuel et **analyse IA** via ton abonnement Claude (Claude Code) ou ChatGPT (Codex CLI).
 - Fenêtre **Comptes IA** : statut, connexion et déconnexion depuis l'app.
 - Mise à la Corbeille native, « Afficher dans le Finder / l'Explorateur », Quick Look sur macOS, sélecteur de dossier natif.
-- Identité visuelle blanc / noir / orange, thèmes clair et sombre automatiques.
+- Identité visuelle blanc / noir / orange, icônes au trait fin, thèmes clair et sombre (menu Présentation → Apparence).

@@ -3,6 +3,7 @@
 // il demande ici les actions natives : corbeille, Finder/Explorateur, Quick Look, sélecteur de dossier.
 import { app, BrowserWindow, Menu, shell, dialog, utilityProcess, nativeTheme } from 'electron';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -13,6 +14,18 @@ app.setName('Taupe');
 if (!app.requestSingleInstanceLock()) app.quit();
 
 let win = null, worker = null, serverUrl = null, quitting = false;
+
+// Réglages persistants (apparence…)
+const SETTINGS = () => path.join(app.getPath('userData'), 'settings.json');
+const loadSettings = () => { try { return JSON.parse(fs.readFileSync(SETTINGS(), 'utf8')); } catch { return {}; } };
+const saveSettings = s => { try { fs.writeFileSync(SETTINGS(), JSON.stringify(s, null, 2)); } catch {} };
+const settings = loadSettings();
+function setTheme(mode) {
+  nativeTheme.themeSource = mode;
+  settings.theme = mode; saveSettings(settings);
+  win?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#0b0b0b' : '#ffffff');
+  buildMenu();
+}
 
 const ACTIONS = {
   async trash(paths) {
@@ -61,7 +74,7 @@ function startWorker() {
 function createWindow() {
   win = new BrowserWindow({
     width: 1380, height: 880, minWidth: 900, minHeight: 600, show: false, title: 'Taupe',
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0e0f13' : '#f4f5f8',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b0b0b' : '#ffffff',
     titleBarStyle: IS_MAC ? 'hiddenInset' : 'default',
     autoHideMenuBar: !IS_MAC,
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false },
@@ -87,6 +100,8 @@ function buildMenu() {
     { role: 'editMenu', label: 'Édition' },
     { label: 'Présentation', submenu: [
       { label: 'Afficher / masquer l’assistant', accelerator: 'CmdOrCtrl+J', click: ui('toggleChat()') },
+      { label: 'Apparence', submenu: [['system', 'Comme le système'], ['light', 'Clair'], ['dark', 'Sombre']].map(([id, label]) =>
+        ({ label, type: 'radio', checked: (settings.theme || 'system') === id, click: () => setTheme(id) })) },
       { type: 'separator' },
       { role: 'resetZoom', label: 'Taille réelle' }, { role: 'zoomIn', label: 'Zoom avant' }, { role: 'zoomOut', label: 'Zoom arrière' },
       { type: 'separator' },
@@ -108,6 +123,7 @@ app.on('window-all-closed', () => { if (!IS_MAC) app.quit(); });
 app.on('before-quit', () => { quitting = true; worker?.kill(); });
 
 app.whenReady().then(async () => {
+  if (['light', 'dark'].includes(settings.theme)) nativeTheme.themeSource = settings.theme;
   buildMenu();
   try { serverUrl = await startWorker(); }
   catch (e) { dialog.showErrorBox('Taupe', `Impossible de démarrer le moteur : ${e.message}`); app.quit(); return; }
