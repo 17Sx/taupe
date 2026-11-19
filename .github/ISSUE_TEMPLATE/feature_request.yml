@@ -1,0 +1,10 @@
+name: 💡 Idée
+description: Proposer une amélioration
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Ton idée
+      description: Le problème que ça résout et comment tu l'imagines.
+    validations: { required: true }

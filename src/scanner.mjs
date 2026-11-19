@@ -3,11 +3,10 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { diskSize, isSkipped, IS_WIN, HOME } from './platform.mjs';
 
 export const F_DIR = 1, F_ERR = 2, F_LINK = 4, F_REMOVED = 8, F_SKIP = 16, F_PKG = 32;
 
-// Dossiers à ne jamais traverser (autres volumes, doublons APFS du volume Data, pseudo-FS)
-const SKIP_ABS = new Set(['/dev', '/Volumes', '/System/Volumes', '/net', '/home', '/.vol', '/.nofollow', '/.resolve']);
 const PKG_EXT = /\.(app|bundle|framework|photoslibrary|musiclibrary|fcpbundle|imovielibrary|xcarchive|plugin|kext|appex|tvlibrary|logicx|band)$/i;
 const CONCURRENCY = 64;
 
@@ -100,6 +99,7 @@ function hogOf(name, parentName) {
     case 'iOS DeviceSupport': case 'watchOS DeviceSupport': return ['Symboles d’appareils Xcode', 'Re-téléchargés si besoin'];
     case 'CoreSimulator': return parentName === 'Developer' ? ['Simulateurs iOS', 'Supprime les vieux via xcrun simctl delete unavailable'] : null;
     case 'Caches': return parentName === 'Library' ? ['Caches d’apps', 'En général sûr à vider (apps fermées)'] : null;
+    case 'Temp': return parentName === 'Local' ? ['Fichiers temporaires', 'Sûr à vider (%TEMP%)'] : null;
     case '.Trash': return ['Corbeille', 'Vide-la depuis le Finder pour récupérer l’espace'];
     case '.npm': case '.pnpm-store': case '.yarn': return ['Cache gestionnaire de paquets', 'Re-téléchargé à la demande'];
     case '.gradle': case '.m2': return ['Cache Java/Gradle', 'Re-téléchargé à la demande'];
@@ -114,7 +114,8 @@ function hogOf(name, parentName) {
 
 // ---------- Suggestions ----------
 const BUILD_CACHES = new Set(['.next', '.nuxt', '.turbo', '.parcel-cache', '.svelte-kit', '.angular', '.expo', '.vercel']);
-const INSTALLERS = new Set(['dmg', 'pkg', 'zip', 'iso', 'xip', 'mpkg']);
+const INSTALLERS = new Set(['dmg', 'pkg', 'zip', 'iso', 'xip', 'mpkg', 'exe', 'msi', 'msix', '7z', 'rar']);
+const APP_CACHE_DIRS = new Set(['Cache', 'Code Cache', 'GPUCache', 'CachedData', 'ShaderCache', 'DawnCache', 'GrShaderCache', 'CrashDumps']);
 // [titre, explication, risque : safe | check]
 const SUGGEST_META = {
   build: ['Caches de build (.next, .turbo…)', 'Recréés automatiquement au prochain build ou « npm run dev ».', 'safe'],
@@ -122,9 +123,10 @@ const SUGGEST_META = {
   venv: ['Environnements Python dormants', 'Recréables avec « pip install -r requirements.txt ».', 'safe'],
   xcode: ['Données Xcode', 'DerivedData et symboles d’appareils : Xcode les régénère au besoin.', 'safe'],
   cache: ['Caches d’applications', 'Les apps les reconstruisent. Ferme l’app concernée avant.', 'safe'],
+  temp: ['Fichiers temporaires Windows', 'Dossier %TEMP% : sûr à vider, sauf fichiers verrouillés par une app ouverte.', 'safe'],
   logs: ['Gros fichiers de log', 'Journaux techniques, rarement utiles une fois le problème passé.', 'safe'],
   worktree: ['Worktrees git / Claude Code', 'Copies de travail de branches. Vérifie qu’il n’y a rien de non commité, puis « git worktree prune » dans le projet.', 'check'],
-  installers: ['Vieux installeurs dans Téléchargements', '.dmg, .pkg, .zip de plus d’une semaine : l’app est sûrement déjà installée.', 'check'],
+  installers: ['Vieux installeurs dans Téléchargements', '.dmg, .pkg, .exe, .msi, .zip de plus d’une semaine : l’app est sûrement déjà installée.', 'check'],
   dupes: ['Doublons probables', 'Même nom et même taille à plusieurs endroits. On garde la copie la plus récente.', 'check'],
   oldBig: ['Gros fichiers pas modifiés depuis plus d’un an', 'À trier à la main : archive-les sur un disque externe ou supprime-les.', 'check'],
   iosBackup: ['Sauvegardes iPhone/iPad', 'Les anciennes sauvegardes d’appareils que tu n’as plus sont inutiles.', 'check'],
@@ -156,7 +158,7 @@ export class Session {
     this.rootPath = rootPath;
     const st = await fsp.lstat(rootPath);
     ctx.dev = st.dev;
-    this.rootId = store.add(-1, rootPath, F_DIR, st.blocks * 512, mt(st));
+    this.rootId = store.add(-1, rootPath, F_DIR, diskSize(st), mt(st));
     this._finish(ctx, this._walk(ctx, store, this.rootId, rootPath));
     return this.rootId;
   }
@@ -172,8 +174,8 @@ export class Session {
     try { st = await fsp.lstat(p); } catch { store.unlink(id); ctx.done = true; return parent; }
     ctx.dev = st.dev; ctx.crossDev = this.rootPath === '/';
     store.unlink(id);
-    const nid = store.add(parent, path.basename(p), F_DIR | (PKG_EXT.test(p) ? F_PKG : 0), st.blocks * 512, mt(st));
-    store.bump(parent, st.blocks * 512, 0);
+    const nid = store.add(parent, path.basename(p), F_DIR | (PKG_EXT.test(p) ? F_PKG : 0), diskSize(st), mt(st));
+    store.bump(parent, diskSize(st), 0);
     this._finish(ctx, this._walk(ctx, store, nid, p));
     return nid;
   }
@@ -193,15 +195,15 @@ export class Session {
         if (err) { store.flags[job.id] |= F_ERR; ctx.errors++; return resolve(); }
         if (ctx.cancelled || !names.length) return resolve();
         ctx.current = job.path;
-        const base = job.path === '/' ? '/' : job.path + '/';
+        const base = job.path.endsWith(path.sep) ? job.path : job.path + path.sep;
         let left = names.length, sumS = 0, sumC = 0;
         for (const nm of names) {
           const full = base + nm;
           fs.lstat(full, (e, st) => {
             if (!e && !ctx.cancelled) {
-              const own = st.blocks * 512;
+              const own = diskSize(st);
               if (st.isDirectory()) {
-                const skip = (SKIP_ABS.has(full) && full !== ctx.root) || (!ctx.crossDev && st.dev !== ctx.dev);
+                const skip = (isSkipped(full) && full !== ctx.root) || (!ctx.crossDev && st.dev !== ctx.dev);
                 const cid = store.add(job.id, nm, F_DIR | (skip ? F_SKIP : 0) | (PKG_EXT.test(nm) ? F_PKG : 0), skip ? 0 : own, mt(st));
                 ctx.dirs++;
                 if (!skip) { sumS += own; push({ id: cid, path: full }); }
@@ -344,9 +346,14 @@ export class Session {
     const rel = path.relative(this.rootPath, p);
     if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return -1;
     let n = this.rootId;
-    for (const seg of rel.split('/')) {
-      let f = -1;
-      for (let c = s.first[n]; c >= 0; c = s.next[c]) if (s.names[c] === seg) { f = c; break; }
+    for (const seg of rel.split(path.sep)) {
+      let f = -1, ci = -1;
+      const low = seg.toLowerCase();
+      for (let c = s.first[n]; c >= 0; c = s.next[c]) {
+        if (s.names[c] === seg) { f = c; break; }
+        if (ci < 0 && s.names[c].toLowerCase() === low) ci = c;
+      }
+      if (f < 0) f = ci;
       if (f < 0) return -1;
       n = f;
     }
@@ -371,10 +378,13 @@ export class Session {
           if (nm === '.venv' || nm === 'venv') { if (sz > 50e6 && age > 60) add('venv', c, `inactif depuis ${fmtAge(age)}`); continue; }
           if (nm === 'DerivedData' || nm === 'iOS DeviceSupport' || nm === 'watchOS DeviceSupport') { if (sz > 50e6) add('xcode', c); continue; }
           if (pname === 'Caches' && gname === 'Library') { if (sz > 100e6) add('cache', c); continue; }
+          if (nm === 'Temp' && pname === 'Local') { if (sz > 100e6) add('temp', c); continue; }
+          if ((ctx & 4) && APP_CACHE_DIRS.has(nm)) { if (sz > 100e6) add('cache', c); continue; }
           if (pname === 'worktrees' && (gname === '.claude' || gname === '.git')) { if (sz > 50e6) add('worktree', c, `modifié il y a ${fmtAge(age)}`); continue; }
           if (pname === 'Backup' && gname === 'MobileSync') { add('iosBackup', c, `du ${new Date(s.mtime[c] * 1000).toLocaleDateString('fr-FR')}`); continue; }
           let cx = ctx;
           if (nm === 'Downloads' || nm === 'Téléchargements') cx |= 1;
+          if (nm === 'AppData') cx |= 4;
           if (f & F_PKG) cx |= 2;
           stack.push([c, cx]);
         } else {
@@ -456,11 +466,13 @@ export class Session {
   // Repère les chemins cités dans un texte (entre backticks ou absolus) qui existent dans le scan
   linksIn(text) {
     const found = new Map(), s = this.store;
-    const cands = [...text.matchAll(/`([^`\n]+)`/g)].map(m => m[1]).concat(text.match(/(?:~|\/Users|\/Applications|\/Library)\/[^\s`'"()<>,;]*/g) || []);
+    const cands = [...text.matchAll(/`([^`\n]+)`/g)].map(m => m[1])
+      .concat(text.match(/(?:~|\/Users|\/Applications|\/Library|\/home)\/[^\s`'"()<>,;]*/g) || [])
+      .concat(text.match(/[A-Za-z]:\\[^\s`'"()<>,;*?|]*/g) || []);
     for (const raw of cands) {
-      let p = raw.trim().replace(/[.,:;!?)]+$/, '').replace(/\/+$/, '');
-      if (p.startsWith('~/')) p = path.join(process.env.HOME || '', p.slice(2));
-      if (!p.startsWith('/') || found.has(raw)) continue;
+      let p = raw.trim().replace(/[.,:;!?)]+$/, '').replace(/[\\/]+$/, '');
+      if (p.startsWith('~/') || p.startsWith('~\\')) p = path.join(HOME, p.slice(2));
+      if (!path.isAbsolute(p) || found.has(raw)) continue;
       const id = this.idOf(p);
       if (id >= 0 && this.valid(id)) found.set(raw, { text: raw, id, parent: s.parent[id], dir: !!(s.flags[id] & F_DIR), size: s.size[id] });
     }
