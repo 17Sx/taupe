@@ -1,7 +1,7 @@
-// Taupe — serveur local (127.0.0.1 uniquement) qui alimente l'interface.
-// Dans l'application, il tourne dans un processus séparé lancé par Electron (electron/worker.mjs),
-// qui lui fournit les actions système natives (corbeille, Finder/Explorateur, Quick Look, sélecteur de dossier).
-// En développement, `node src/server.mjs` le lance seul avec des actions de secours.
+// Taupe — local server (127.0.0.1 only) that powers the UI.
+// In the app, it runs in a separate process started by Electron (electron/worker.mjs),
+// which provides it with native system actions (Trash, Finder/Explorer, Quick Look, folder picker).
+// In development, `node src/server.mjs` runs it standalone with fallback actions.
 import http from 'node:http';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -13,7 +13,7 @@ import { tr, pickLang } from './i18n.mjs';
 import { HOME, PLATFORM, IS_MAC, expand, isProtected, places, fallbackActions } from './platform.mjs';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
-// Script MCP lancé par la CLI de l'IA : en production il est extrait de l'archive asar (asarUnpack)
+// MCP script launched by the AI CLI: in production it is unpacked from the asar archive (asarUnpack)
 const MCP_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'mcp.mjs').replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
 const DEMO = process.env.TAUPE_DEMO_AI === '1';
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
@@ -39,7 +39,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
   };
   const pathFor = id => session.pathOf(needId(id));
 
-  // Dernière analyse IA (on masque les suggestions déjà supprimées ou devenues invalides)
+  // Latest AI analysis (hides suggestions already deleted or no longer valid)
   function aiView() {
     if (!aiJob || aiJob.store !== session.store) return { status: 'idle' };
     const { store, ...j } = aiJob;
@@ -52,9 +52,9 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
     return j;
   }
 
-  // Met à la Corbeille des éléments déjà validés ({id, path, size}) ; refuse les chemins protégés
+  // Moves already-validated items ({id, path, size}) to the Trash; refuses protected paths
   async function trashItems(items, lang = 'en') {
-    // si un dossier ET son contenu sont demandés, on ne garde que le dossier
+    // if a folder AND its contents are requested, keep only the folder
     const top = items.filter(it => !items.some(o => o !== it && it.path.startsWith(o.path + sep)));
     const todo = [], failed = [];
     for (const it of top) (isProtected(it.path) ? failed.push({ ...it, error: tr(lang, 'Chemin protégé (système ou dossier principal)') }) : todo.push(it));
@@ -67,7 +67,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
     return { done, failed, freed: done.reduce((a, t) => a + t.size, 0) };
   }
 
-  // ----- Conversations : l'IA agit via les outils MCP, chaque action devient un événement animé -----
+  // ----- Conversations: the AI acts through MCP tools, each action becomes an animated event -----
   const chats = new Map();
   let selfUrl = '';
   const ev = (chat, e) => { e.i = chat.events.length; e.t = Date.now(); e.status ??= 'running'; chat.events.push(e); return e; };
@@ -80,7 +80,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
     return id;
   };
   const clamp = (v, d, max) => Math.max(1, Math.min(max, Number(v) || d));
-  const pause = ms => new Promise(r => setTimeout(r, ms)); // laisse le temps de voir l'animation
+  const pause = ms => new Promise(r => setTimeout(r, ms)); // leaves time to see the animation
   const TOOL_IMPL = {
     async search_files(c, a) {
       const f = folderOf(c, a.folder);
@@ -134,7 +134,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
       clearTimeout(timer);
       c.pending.delete(e.i);
       if (!accept) { e.status = accept === null ? 'expired' : 'refused'; return { trashed: [], message: accept === null ? 'Pas de réponse de l’utilisateur.' : 'L’utilisateur a refusé.' }; }
-      // l'utilisateur a pu décocher certains éléments avant de confirmer
+      // the user may have unchecked some items before confirming
       const chosen = accept.paths ? ok.filter(x => accept.paths.includes(x.path)) : ok;
       const kept = ok.filter(x => !chosen.includes(x)).map(x => x.path);
       if (!chosen.length) { e.status = 'refused'; return { trashed: [], kept, message: 'L’utilisateur a tout décoché.' }; }
@@ -145,7 +145,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
     },
   };
 
-  // Agent de démonstration (TAUPE_DEMO_AI=1, développement uniquement) : enchaîne de vraies actions sans IA
+  // Demo agent (TAUPE_DEMO_AI=1, development only): chains real actions without an AI
   async function demoAgent(c, lang = 'en') {
     const fr = lang === 'fr';
     await pause(900);
@@ -180,7 +180,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
     'GET /api/hogs': (_, q, lang) => session.hogs(needId(q.get('id')), lang),
     'GET /api/suggest': (_, q, lang) => session.suggestions(needId(q.get('id')), lang),
 
-    // ----- IA : comptes -----
+    // ----- AI: accounts -----
     'GET /api/ai': async (_, q) => ({ job: aiView(), labels: ai.PROVIDERS, login: ai.loginState(),
       providers: { ...await ai.statusAll(q.get('refresh') === '1'), ...(DEMO ? { demo: { installed: true, loggedIn: true, detail: 'Agent de démonstration' } } : {}) } }),
     'POST /api/ai/connect': (b, _, lang) => { ai.connect(b.provider, lang); return { ok: true }; },
@@ -193,7 +193,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
       await actions.openExternal(u); return { ok: true };
     },
 
-    // ----- IA : chat + analyse -----
+    // ----- AI: chat + analysis -----
     'POST /api/chat/start': async (b, _, hdrLang) => {
       const lang = pickLang(b.lang || hdrLang);
       const id = needId(b.id);
@@ -210,7 +210,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
       const chat = { id: crypto.randomBytes(8).toString('hex'), folder: id, provider, status: 'running', events: [], pending: new Map(),
         answer: '', links: [], error: '', started: Date.now(), ended: 0, proc: null };
       chats.set(chat.id, chat);
-      for (const [k, c] of chats) if (Date.now() - c.started > 3600e3) chats.delete(k); // ménage
+      for (const [k, c] of chats) if (Date.now() - c.started > 3600e3) chats.delete(k); // cleanup
       const mcp = { command: process.execPath, args: [MCP_PATH],
         env: { ELECTRON_RUN_AS_NODE: '1', TAUPE_URL: selfUrl, TAUPE_TOKEN: TOKEN, TAUPE_CHAT: chat.id } };
       (provider === 'demo' ? demoAgent(chat, lang) : ai.chatAgent(provider, ctx, msgs, mcp, p => (chat.proc = p), lang))
@@ -235,7 +235,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
       if (c?.status === 'running') { c.status = 'cancelled'; try { c.proc?.kill(); } catch {} for (const r of c.pending.values()) r(false); }
       return { ok: true };
     },
-    // Appelé par le serveur MCP (src/mcp.mjs) quand l'IA utilise un outil
+    // Called by the MCP server (src/mcp.mjs) when the AI uses a tool
     'POST /api/tool': async b => {
       const c = chats.get(b.chat);
       if (!c || c.status !== 'running') throw new HttpError(409, 'Conversation terminée');
@@ -255,7 +255,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
         for (const x of raw.suggestions || []) {
           const p = expand(String(x.path || '').replace(/[\\/]+$/, ''));
           const sid = session.idOf(p);
-          if (sid < 0 || !session.valid(sid)) continue; // chemin inventé ou disparu
+          if (sid < 0 || !session.valid(sid)) continue; // made-up or vanished path
           const real = session.pathOf(sid);
           if (items.some(o => o.path === real || real.startsWith(o.path + sep) || o.path.startsWith(real + sep))) continue;
           const prot = isProtected(real);
@@ -270,13 +270,13 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
       return { ok: true };
     },
 
-    // ----- Actions système -----
+    // ----- System actions -----
     'POST /api/reveal': async b => { await actions.reveal(pathFor(b.id)); return { ok: true }; },
     'POST /api/open': async b => { await actions.open(pathFor(b.id)); return { ok: true }; },
     'POST /api/quicklook': async b => { await actions.quicklook(pathFor(b.id)); return { ok: true }; },
     'POST /api/trash': async (b, _, lang) => {
-      // Le client envoie {id, path} : on vérifie que l'id pointe TOUJOURS vers ce chemin
-      // (sinon l'arbre a changé entre-temps → on refuse plutôt que de supprimer autre chose).
+      // The client sends {id, path}: check that the id STILL points to that path
+      // (otherwise the tree changed in the meantime → refuse rather than delete something else).
       const items = [], failed = [];
       for (const it of b.items || []) {
         const id = Number(it.id);
@@ -304,14 +304,14 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
   const server = http.createServer(async (req, res) => {
     let lang = 'en';
     try {
-      // Anti DNS-rebinding : on ne répond qu'à nous-mêmes
+      // Anti DNS-rebinding: only answer requests addressed to ourselves
       const host = req.headers.host || '';
       lang = pickLang(req.headers['x-lang']);
       if (host !== `127.0.0.1:${PORT}` && host !== `localhost:${PORT}`) return send(res, 403, { error: tr(lang, 'Host refusé') });
       const url = new URL(req.url, `http://${host}`);
 
       if (url.pathname.startsWith('/api/')) {
-        // Anti-CSRF : jeton secret injecté dans la page
+        // Anti-CSRF: secret token injected into the page
         if (req.headers['x-token'] !== TOKEN) return send(res, 403, { error: tr(lang, 'Jeton invalide — recharge la page') });
         const fn = api[`${req.method} ${url.pathname}`];
         if (!fn) return send(res, 404, { error: tr(lang, 'Route inconnue') });
@@ -340,7 +340,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
       PORT = server.address().port;
       selfUrl = `http://127.0.0.1:${PORT}/`;
       const out = { port: PORT, url: selfUrl, close: () => { server.close(); server.closeAllConnections?.(); } };
-      // Tests uniquement : ouvre une conversation sans lancer d'IA, pour piloter les outils MCP à la main
+      // Tests only: opens a conversation without starting an AI, to drive the MCP tools by hand
       if (testing) out.testChat = () => {
         const c = { id: crypto.randomBytes(8).toString('hex'), folder: session.rootId, status: 'running', events: [], pending: new Map(), started: Date.now() };
         chats.set(c.id, c);
@@ -352,7 +352,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
   });
 }
 
-// ---------- Mode développement : `node src/server.mjs` ----------
+// ---------- Development mode: `node src/server.mjs` ----------
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { url } = await startServer({ port: Number(process.env.PORT) || 4747 });
   console.log(`\n  🐾 Taupe (mode dev, navigateur) : ${url}\n  Pour l'application : npm start\n`);

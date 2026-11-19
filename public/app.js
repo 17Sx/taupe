@@ -18,7 +18,7 @@ async function api(method, url, body) {
 }
 const get = u => api('GET', u), post = (u, b) => api('POST', u, b || {});
 
-// ---------- Formatage ----------
+// ---------- Formatting ----------
 const nf = new Intl.NumberFormat(LOCALE);
 const rtf = new Intl.RelativeTimeFormat(LANG, { numeric: 'auto' });
 const dec = s => (LANG === 'fr' ? String(s).replace('.', ',') : String(s));
@@ -49,7 +49,7 @@ for (const [e, list] of Object.entries({
   '📕': 'pdf epub', '📝': 'doc docx pages txt md rtf odt', '📊': 'xls xlsx numbers csv ods', '📽️': 'ppt pptx key', '🗄️': 'db sqlite sqlite3 realm', '📜': 'log',
   '⚙️': 'js mjs cjs ts tsx jsx json py rb go rs swift java kt c h cpp m cs php html css scss vue svelte sh yml yaml toml lock sql',
 })) for (const x of list.split(' ')) EMOJI[x] = e;
-// Icônes au trait fin (16×16, trait 1.15) — tout en currentColor
+// Thin-stroke icons (16×16, stroke 1.15) — all in currentColor
 const SVG = {
   dir: '<path d="M1.75 4.5c0-.55.45-1 1-1h3.4l1.35 1.4h5.75c.55 0 1 .45 1 1v6.35c0 .55-.45 1-1 1H2.75c-.55 0-1-.45-1-1z"/>',
   file: '<path d="M4.25 1.75h4.9l2.6 2.6v9.9H4.25z"/><path d="M9.15 1.75v2.6h2.6"/>',
@@ -82,7 +82,7 @@ function iconKey(r) {
 const iconCls = r => ({ dir: 'dir', lock: 'lock', disk: 'file', pkg: 'pkg', link: 'file', file: 'file' })[iconKey(r)];
 const icon = r => svg(iconKey(r));
 
-// ---------- État ----------
+// ---------- State ----------
 const S = {
   root: null, cur: null, data: null, rows: [], rest: null, view: [], tab: 'content',
   sort: { k: 'size', d: -1 }, filter: '', sel: new Map(), focus: -1, anchor: -1,
@@ -97,7 +97,7 @@ function toast(msg, kind = '', ms = 5000) {
   setTimeout(() => t.remove(), ms);
 }
 
-// ---------- Vues ----------
+// ---------- Views ----------
 function show(which) {
   $('#welcome').hidden = which !== 'welcome';
   $('#app').hidden = which !== 'app';
@@ -200,7 +200,7 @@ function setFocus(i, scroll = true) {
   highlightTm(S.view[i].id);
 }
 
-// ---------- Chargement ----------
+// ---------- Loading ----------
 async function load(opts = {}) {
   const id = S.cur;
   if (id == null) return;
@@ -244,7 +244,7 @@ function setTab(tab) {
 }
 
 // ---------- Treemap ----------
-// Palette : oranges et noirs/gris en alternance (TM_LIGHT = fond clair → texte noir)
+// Palette: alternating oranges and blacks/grays (TM_LIGHT = light background → black text)
 const TM_COLORS = ['#FF5F00', '#1A1A1A', '#FF8B3D', '#3D3D3B', '#C24800', '#5C5C59', '#FFB27A', '#262625', '#8F3600', '#7A7A76'];
 const TM_LIGHT = [true, false, true, false, false, false, true, false, false, false];
 function squarify(items, x, y, w, h) {
@@ -282,7 +282,7 @@ async function loadTreemap() {
     const data = await get(`/api/treemap?id=${id}`);
     if (id !== S.cur) return;
     S.tm = data; drawTreemap();
-  } catch { /* ignoré */ }
+  } catch { /* ignored */ }
 }
 
 function drawTreemap() {
@@ -339,9 +339,9 @@ function renderTypes(t) {
     <div><h3>${t('Par extension')} <span class="muted small">${esc(t('(hors apps & dépendances — clique pour voir les fichiers)'))}</span></h3>${ext}</div>`;
 }
 
-// ---------- Suggestions (règles + IA) ----------
+// ---------- Suggestions (rules + AI) ----------
 const RISK = { safe: ['Sans risque', 'ok'], check: ['À vérifier', 'warn'], careful: ['Prudence', 'bad'] };
-const SUG = new Map();           // id → élément affiché (pour sélection / actions)
+const SUG = new Map();           // id → displayed element (for selection / actions)
 let RULES = [], AI = null, aiTimer = null;
 const expanded = new Set();
 const riskBadge = r => { const [l, c] = RISK[r] || RISK.check; return `<span class="risk ${c}">${t(l)}</span>`; };
@@ -433,7 +433,7 @@ function selectItems(items) {
   renderRules(RULES); if (AI) renderAI(AI);
 }
 
-// ---------- Sélection & corbeille ----------
+// ---------- Selection & Trash ----------
 function toggleSel(i, force) {
   const r = S.view[i]; if (!r) return;
   const on = force ?? !S.sel.has(r.id);
@@ -494,7 +494,7 @@ async function action(a, r) {
 }
 function openRow(r) { if (r.dir && !r.skip) action('go', r); else action('open', r); }
 
-// ---------- Chat IA contextuel ----------
+// ---------- Contextual AI chat ----------
 let chatOpen = lsGet('taupe.chatOpen') !== '0';
 let CHAT = (() => { try { return JSON.parse(lsGet('taupe.chat') || '[]').map(m => m.pending ? { ...m, pending: false, error: true, content: t('Interrompu.') } : m); } catch { return []; } })();
 let chatBusy = false, chatTimer = null;
@@ -502,7 +502,7 @@ const CHAT_IDEAS = ['Qu’est-ce qui prend le plus de place ici ?', 'Trouve tous
   'Montre-moi mes plus gros fichiers', 'Supprime les vieux installeurs .dmg', 'C’est quoi ces dossiers ?'];
 const saveChat = () => lsSet('taupe.chat', JSON.stringify(CHAT.slice(-40)));
 
-// Mini-markdown : blocs de code, `code` (→ liens cliquables si chemin connu), **gras**, listes, titres
+// Mini-markdown: code blocks, `code` (→ clickable links if the path is known), **bold**, lists, headings
 function mdLite(text, links = []) {
   const L = new Map(links.map(l => [l.text, l]));
   const link = (raw, l) => `<a class="plink" data-id="${l.id}" data-parent="${l.parent}" data-dir="${l.dir ? 1 : 0}" title="${t('Ouvrir dans Taupe · {size}', { size: fmtSize(l.size) })}">${esc(pretty(raw))}</a>`;
@@ -544,13 +544,13 @@ function renderChat() {
 }
 const AI_LABEL = { claude: 'Claude', codex: 'ChatGPT', demo: t('Démo') };
 
-// Une action de l'IA, animée tant qu'elle est en cours
+// An AI action, animated while it is in progress
 const q = s => (LANG === 'fr' ? `« ${esc(s)} »` : `“${esc(s)}”`);
-// Chemin court lisible (2 derniers segments), chemin complet au survol
+// Short readable path (last 2 segments), full path on hover
 const short = p => { const parts = String(p).split(SEP).filter(Boolean); return (parts.length > 2 ? '…' + SEP : (p.startsWith(SEP) ? SEP : '')) + parts.slice(-2).join(SEP); };
 const where = p => `<span class="ap" title="${esc(p)}">${esc(short(p))}</span>`;
 const relTo = (base, p) => (base && p.startsWith(base.endsWith(SEP) ? base : base + SEP) ? p.slice(base.length).replace(/^[\\/]/, '') : short(p));
-const TRASH_OFF = new Map(); // éléments décochés dans une carte de confirmation (clé chat:événement)
+const TRASH_OFF = new Map(); // items unchecked in a confirmation card (key chat:event)
 function renderAct(e, m) {
   const run = e.status === 'running', k = `act ${e.type} ${run ? 'running' : e.status}`;
   const line = (label, extra = '') => `<div class="${k}"><i class="dot"></i><span class="lbl">${label}</span>${extra}</div>`;
@@ -584,7 +584,7 @@ function renderAct(e, m) {
   return '';
 }
 
-// Effets d'une action sur l'interface (une seule fois, au moment où elle arrive ou se termine)
+// Effects of an action on the UI (only once, when it arrives or finishes)
 function applyAct(e, prev) {
   if (e.type === 'open' && !prev) {
     if (S.tab !== 'content') setTabSilently('content');
@@ -673,7 +673,7 @@ function openLink(a) {
   if (a.dataset.dir === '1') navigate(id); else navigate(parent, id);
 }
 
-// ---------- Comptes IA (Claude / ChatGPT) : connexion en un clic ----------
+// ---------- AI accounts (Claude / ChatGPT): one-click login ----------
 let PROVS = null, LOGIN = null, loginTimer = null, lastSig = '';
 const NAME = { claude: 'Claude', codex: 'ChatGPT', demo: t('Démo') };
 const ready = p => !!(p && p.installed && p.loggedIn);
@@ -686,7 +686,7 @@ function providerOptions() {
     `<option value="${k}"${k === pick ? ' selected' : ''}>${esc(AI_LABEL[k])}</option>`).join('');
 }
 
-// Bloc de connexion réutilisé (assistant, suggestions, fenêtre Comptes)
+// Shared login block (assistant, suggestions, Accounts window)
 function connectBlock(only) {
   const L = LOGIN?.status === 'running' ? LOGIN : null;
   if (L && (!only || only === L.provider)) {
@@ -715,7 +715,7 @@ async function loadProviders(refresh) {
     if (wasRunning && LOGIN?.status === 'done') { toast(t('Compte {p} connecté', { p: esc(NAME[LOGIN.provider]) }), 'ok'); return loadProviders(true); }
     const any = anyReady();
     $('#chatProv').innerHTML = providerOptions();
-    // Connecter un autre compte sans quitter l'assistant (« + ChatGPT » quand Claude est déjà connecté, etc.)
+    // Connect another account without leaving the assistant ("+ ChatGPT" when Claude is already connected, etc.)
     const others = any ? Object.keys(PROVS).filter(k => !ready(PROVS[k]) && NAME[k]) : [];
     const busyLogin = LOGIN?.status === 'running' && others.includes(LOGIN.provider);
     $('#chatAdd').innerHTML = busyLogin ? '' : others.map(k => `<button type="button" class="linkbtn" data-connect="${k}" title="${t('Connecter aussi ton compte {p}', { p: NAME[k] })}">+ ${NAME[k]}</button>`).join('');
@@ -756,7 +756,7 @@ async function submitCode(code) {
   if (!code) return;
   try { await post('/api/ai/login/code', { code }); toast(t('Code envoyé, connexion en cours…'), '', 2500); loadProviders(); } catch (e) { toast(esc(e.message), 'err'); }
 }
-// Claude affiche un code à recopier : dès qu'on revient dans Taupe, on le lit dans le presse-papiers.
+// Claude shows a code to copy: as soon as the user returns to Taupe, read it from the clipboard.
 let lastClip = '';
 window.addEventListener('focus', async () => {
   if (LOGIN?.status !== 'running' || LOGIN.phase !== 'login' || !LOGIN.needsCode) return;
@@ -857,7 +857,7 @@ async function poll(once) {
   if (!once || scanning) pollTimer = setTimeout(poll, scanning ? 700 : 3000);
 }
 
-// ---------- Événements ----------
+// ---------- Events ----------
 $('#scanForm').addEventListener('submit', e => { e.preventDefault(); startScan($('#pathInput').value || '~'); });
 $('#cards').addEventListener('click', e => { const c = e.target.closest('.card'); if (!c) return; c.dataset.pick ? pickFolder() : startScan(c.dataset.path); });
 $('#pickBtn').addEventListener('click', () => pickFolder());
@@ -916,7 +916,7 @@ $('#list').addEventListener('click', e => {
 });
 $('#list').addEventListener('dblclick', e => { const row = e.target.closest('.row'); if (row && !e.target.closest('button,input')) openRow(S.view[+row.dataset.i]); });
 
-// Treemap : clic, survol
+// Treemap: click, hover
 const tip = $('#tip');
 $('#tm').addEventListener('click', e => {
   const c = e.target.closest('[data-id]'); if (!c) return;
@@ -999,7 +999,7 @@ document.addEventListener('keydown', e => {
   else if (k === 'Home' || k === 'End') { e.preventDefault(); setFocus(k === 'Home' ? 0 : S.view.length - 1); }
 });
 
-// ---------- Démarrage ----------
+// ---------- Startup ----------
 (async () => {
   applyPlatformLabels();
   initChat();

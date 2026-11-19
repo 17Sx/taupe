@@ -1,4 +1,4 @@
-// Test du serveur MCP : on joue le rôle de Claude Code / Codex et on pilote les outils de Taupe.
+// MCP server test: we play the role of Claude Code / Codex and drive Taupe's tools.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

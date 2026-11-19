@@ -1,5 +1,5 @@
-// Scanner disque rapide + arbre en mémoire compact (typed arrays).
-// Chaque fichier/dossier = un "nœud" identifié par un entier.
+// Fast disk scanner + compact in-memory tree (typed arrays).
+// Each file/folder is a "node" identified by an integer.
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -18,9 +18,9 @@ class Store {
     this.parent = g(this.parent, Int32Array);
     this.first = g(this.first, Int32Array);
     this.next = g(this.next, Int32Array);
-    this.size = g(this.size, Float64Array);   // octets réellement occupés sur disque
-    this.count = g(this.count, Uint32Array);  // nb de fichiers dans le sous-arbre
-    this.mtime = g(this.mtime, Uint32Array);  // secondes epoch
+    this.size = g(this.size, Float64Array);   // bytes actually used on disk
+    this.count = g(this.count, Uint32Array);  // number of files in the subtree
+    this.mtime = g(this.mtime, Uint32Array);  // epoch seconds
     this.flags = g(this.flags, Uint8Array);
     this.cap = cap;
   }
@@ -34,7 +34,7 @@ class Store {
     else this.next[id] = -1;
     return id;
   }
-  // Ajoute size/count à id et à tous ses ancêtres (s'arrête sur un sous-arbre supprimé)
+  // Adds size/count to id and all its ancestors (stops at a removed subtree)
   bump(id, s, c) {
     const { parent, flags, size, count } = this;
     for (let a = id; a >= 0; a = parent[a]) {
@@ -73,7 +73,7 @@ function pool(start, worker, conc) {
   });
 }
 
-// ---------- Catégories de fichiers ----------
+// ---------- File categories ----------
 const CAT = {
   video: ['Vidéos', 'mp4 mov m4v mkv avi webm wmv flv mpg mpeg 3gp mts m2ts prores braw r3d'],
   image: ['Images', 'jpg jpeg png gif heic heif webp tiff tif bmp raw cr2 cr3 nef arw dng psd ai svg ico icns xcf sketch fig'],
@@ -88,7 +88,7 @@ for (const [k, [, exts]] of Object.entries(CAT)) for (const e of exts.split(' ')
 const CAT_LABEL = { ...Object.fromEntries(Object.entries(CAT).map(([k, [l]]) => [k, l])), app: 'Applications', dev: 'Dépendances & builds dev', other: 'Autres' };
 const DEV_DIRS = new Set(['node_modules', '.git', '.venv', 'venv', '__pycache__', 'Pods', 'DerivedData', '.gradle', '.next', '.nuxt', '.turbo', '.parcel-cache', '.svelte-kit', '.pnpm-store', '.cargo', '.rustup']);
 
-// ---------- Dossiers "nettoyables" connus ----------
+// ---------- Known "cleanable" folders ----------
 function hogOf(name, parentName) {
   switch (name) {
     case 'node_modules': return ['Dépendances npm', 'Régénérable avec npm install / bun install'];
@@ -117,7 +117,7 @@ function hogOf(name, parentName) {
 const BUILD_CACHES = new Set(['.next', '.nuxt', '.turbo', '.parcel-cache', '.svelte-kit', '.angular', '.expo', '.vercel']);
 const INSTALLERS = new Set(['dmg', 'pkg', 'zip', 'iso', 'xip', 'mpkg', 'exe', 'msi', 'msix', '7z', 'rar']);
 const APP_CACHE_DIRS = new Set(['Cache', 'Code Cache', 'GPUCache', 'CachedData', 'ShaderCache', 'DawnCache', 'GrShaderCache', 'CrashDumps']);
-// [titre, explication, risque : safe | check]
+// [title, explanation, risk: safe | check]
 const SUGGEST_META = {
   build: ['Caches de build (.next, .turbo…)', 'Recréés automatiquement au prochain build ou « npm run dev ».', 'safe'],
   nodeOld: ['node_modules de projets dormants', 'Pas touchés depuis plus de 45 jours. Un « npm install » / « bun install » les recrée.', 'safe'],
@@ -152,7 +152,7 @@ export class Session {
     return (this.ctx = { root, cancelled: false, done: false, files: 0, dirs: 0, errors: 0, current: root, started: Date.now(), ended: 0, seen: new Set(), crossDev: root === '/' });
   }
 
-  // Lance un scan complet (remplace l'arbre)
+  // Runs a full scan (replaces the tree)
   async start(rootPath) {
     const ctx = this._newCtx(rootPath);
     const store = this.store = new Store();
@@ -164,7 +164,7 @@ export class Session {
     return this.rootId;
   }
 
-  // Re-scanne un sous-dossier et le remplace dans l'arbre. Renvoie le nouvel id.
+  // Rescans a subfolder and replaces it in the tree. Returns the new id.
   async rescan(id) {
     if (id === this.rootId) return this.start(this.rootPath);
     const p = this.pathOf(id);
@@ -210,7 +210,7 @@ export class Session {
                 if (!skip) { sumS += own; push({ id: cid, path: full }); }
               } else {
                 let size = own;
-                if (st.nlink > 1) { // hard link : ne compter qu'une fois
+                if (st.nlink > 1) { // hard link: count it only once
                   const key = st.dev + ':' + st.ino;
                   if (ctx.seen.has(key)) size = 0; else ctx.seen.add(key);
                 }
@@ -225,7 +225,7 @@ export class Session {
     });
   }
 
-  // ---------- Requêtes ----------
+  // ---------- Queries ----------
   valid(id) {
     const s = this.store;
     if (!s || !Number.isInteger(id) || id < 0 || id >= s.n) return false;
@@ -273,7 +273,7 @@ export class Session {
     });
   }
 
-  // DFS itératif sur le sous-arbre
+  // Iterative DFS over the subtree
   _each(id, fn) {
     const s = this.store, stack = [id];
     while (stack.length) {
@@ -282,7 +282,7 @@ export class Session {
     }
   }
 
-  // Recherche par nom (insensible à la casse et aux accents) ; un dossier trouvé n'est pas parcouru
+  // Name search (case- and accent-insensitive); a matching folder is not descended into
   search(id, query, limit = 30) {
     const s = this.store, out = [];
     const norm = t => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -351,7 +351,7 @@ export class Session {
     return out.slice(0, 400).map(r => { r.rel = path.relative(base, this.pathOf(s.parent[r.c])); delete r.c; return r; });
   }
 
-  // Retrouve l'id d'un chemin absolu (ou -1)
+  // Finds the id of an absolute path (or -1)
   idOf(p) {
     const s = this.store;
     if (!s) return -1;
@@ -374,12 +374,12 @@ export class Session {
     return n;
   }
 
-  // ---------- Suggestions automatiques (règles) ----------
+  // ---------- Automatic suggestions (rules) ----------
   suggestions(id, lang = 'en') {
     const s = this.store, now = Date.now() / 1000, DAY = 86400, G = {}, dupes = new Map();
     const add = (key, c, note) => (G[key] ||= []).push({ c, note });
     const ageOf = c => (now - s.mtime[c]) / DAY;
-    const stack = [[id, 0]]; // ctx : 1 = dans Téléchargements, 2 = dans un paquet (.app…)
+    const stack = [[id, 0]]; // ctx: 1 = inside Downloads, 2 = inside a bundle (.app…)
     while (stack.length) {
       const [n, ctx] = stack.pop();
       const pname = s.names[n], gname = s.parent[n] >= 0 ? s.names[s.parent[n]] : '';
@@ -411,7 +411,7 @@ export class Session {
         }
       }
     }
-    // Doublons : même nom + même taille → on propose tout sauf le plus récent
+    // Duplicates: same name + same size → suggest all but the most recent
     for (const ids of dupes.values()) {
       if (ids.length < 2) continue;
       ids.sort((a, b) => s.mtime[b] - s.mtime[a]);
@@ -425,7 +425,7 @@ export class Session {
     }).sort((a, b) => b.total - a.total);
   }
 
-  // ---------- Résumé texte du scan, pour l'IA ----------
+  // ---------- Text summary of the scan, for the AI ----------
   digest(id) {
     const s = this.store, total = s.size[id], now = Date.now() / 1000;
     const age = c => fmtAge((now - s.mtime[c]) / 86400);
@@ -449,7 +449,7 @@ export class Session {
       `## Candidates found by built-in rules\n${rules || '(none)'}\n`;
   }
 
-  // ---------- Contexte du dossier affiché, pour le chat ----------
+  // ---------- Context of the displayed folder, for the chat ----------
   chatContext(id) {
     const s = this.store, now = Date.now() / 1000, total = s.size[id] || 1;
     const age = c => fmtAge((now - s.mtime[c]) / 86400);
@@ -477,7 +477,7 @@ export class Session {
     return out.join('\n');
   }
 
-  // Repère les chemins cités dans un texte (entre backticks ou absolus) qui existent dans le scan
+  // Finds paths mentioned in a text (in backticks or absolute) that exist in the scan
   linksIn(text) {
     const found = new Map(), s = this.store;
     const cands = [...text.matchAll(/`([^`\n]+)`/g)].map(m => m[1])

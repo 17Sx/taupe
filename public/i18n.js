@@ -10,7 +10,7 @@ const LOCALE = LANG === 'fr' ? 'fr-FR' : 'en-US';
 document.documentElement.lang = LANG;
 
 const EN = {
-  // Accueil, en-tête, barre d'outils
+  // Welcome, header, toolbar
   'Analyser': 'Scan',
   'Parcourir…': 'Browse…',
   'Choisir un dossier…': 'Choose a folder…',
@@ -88,7 +88,7 @@ const EN = {
   'Analyse IA': 'AI analysis', 'Comptes': 'Accounts', 'Relancer': 'Run again', 'Analyser ce dossier': 'Analyze this folder',
   'Analyse IA terminée : {n} suggestions': 'AI analysis done: {n} suggestions',
 
-  // Sélection, corbeille
+  // Selection, Trash
   '<b>{n}</b> élément sélectionné · <b>{size}</b>': '<b>{n}</b> item selected · <b>{size}</b>',
   '<b>{n}</b> éléments sélectionnés · <b>{size}</b>': '<b>{n}</b> items selected · <b>{size}</b>',
   'Tout désélectionner': 'Deselect all', 'Mettre à la corbeille': 'Move to Trash',
@@ -161,12 +161,12 @@ function t(s, v) {
   if (v) r = r.replace(/\{(\w+)\}/g, (m, k) => (v[k] ?? m));
   return r;
 }
-// Pluriel : en français 0 et 1 sont au singulier, en anglais seul 1 l'est
+// Plural: in French 0 and 1 are singular, in English only 1 is
 const isPlural = n => (LANG === 'fr' ? n > 1 : n !== 1);
 function tn(n, one, many, v = {}) {
   return t(isPlural(n) ? many : one, { n: new Intl.NumberFormat(LOCALE).format(n), ...v });
 }
-// Textes statiques du HTML : data-t (contenu), data-t-title (bulle), data-t-ph (placeholder)
+// Static HTML text: data-t (content), data-t-title (tooltip), data-t-ph (placeholder)
 function applyI18n(root = document) {
   if (LANG === 'fr') return;
   for (const el of root.querySelectorAll('[data-t]')) el.innerHTML = t(el.innerHTML.trim());

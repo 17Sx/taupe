@@ -1,7 +1,7 @@
-// Analyse IA via les CLI locales, qui utilisent ton abonnement :
-//   - claude (Claude Code)  → abonnement Claude
-//   - codex  (Codex CLI)    → abonnement ChatGPT
-// Seule la structure (chemins, tailles, dates) est envoyée, jamais le contenu des fichiers.
+// AI analysis through the local CLIs, which use your subscription:
+//   - claude (Claude Code)  → Claude subscription
+//   - codex  (Codex CLI)    → ChatGPT subscription
+// Only the structure (paths, sizes, dates) is sent, never file contents.
 import { spawn, execFile } from 'node:child_process';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -57,7 +57,7 @@ Answer only with the requested JSON.
 === DATA ===
 `;
 
-// ---------- Localisation des binaires (macOS, Windows, Linux) ----------
+// ---------- Locating the binaries (macOS, Windows, Linux) ----------
 const IS_WIN = process.platform === 'win32';
 const binCache = new Map();
 async function findBin(name, fresh = false) {
@@ -74,7 +74,7 @@ async function findBin(name, fresh = false) {
     const p = path.join(d, n);
     try { fs.accessSync(p, IS_WIN ? fs.constants.F_OK : fs.constants.X_OK); if (fs.statSync(p).isFile()) { found = p; break outer; } } catch {}
   }
-  if (!found) { // dernier recours : demander au shell de l'utilisateur
+  if (!found) { // last resort: ask the user's shell
     found = await new Promise(res => IS_WIN
       ? execFile('where.exe', [name], { timeout: 6000 }, (e, out) => res(!e ? out.trim().split(/\r?\n/)[0] || null : null))
       : execFile(process.env.SHELL || '/bin/zsh', ['-lic', `command -v ${name}`], { timeout: 6000 },
@@ -86,14 +86,14 @@ async function findBin(name, fresh = false) {
 
 function childEnv() {
   const env = { ...process.env };
-  // On veut l'abonnement, pas une clé API facturée à l'usage ; et pas de détection « session imbriquée ».
-  // (et si Taupe est lancé depuis une app Claude, on ne réutilise pas son proxy/sa session)
+  // We want the subscription, not a pay-per-use API key; and no "nested session" detection.
+  // (and if Taupe is launched from a Claude app, don't reuse its proxy/session)
   for (const k of Object.keys(env)) if (/^(CLAUDE|ANTHROPIC_|OPENAI_API_KEY$|AI_AGENT$|BAGGAGE$|ELECTRON_)/.test(k)) delete env[k];
   return env;
 }
 
-// Sous Windows, les CLI installées par npm sont des scripts .cmd : il faut passer par cmd.exe
-// avec un échappement strict des arguments (même logique que le paquet cross-spawn).
+// On Windows, npm-installed CLIs are .cmd scripts: they must go through cmd.exe
+// with strict argument escaping (same logic as the cross-spawn package).
 function winQuote(arg, cmdShim) {
   arg = String(arg).replace(/(\\*)"/g, '$1$1\\"').replace(/(\\*)$/, '$1$1');
   arg = `"${arg}"`.replace(/[()%!^"<>&|]/g, '^$&');
@@ -134,8 +134,8 @@ function extractJson(text) {
   return JSON.parse(text.slice(a, b + 1));
 }
 
-// Appel unique à la CLI, sans aucun outil (lecture/écriture/shell désactivés).
-// schema → réponse JSON structurée ; sinon texte libre. fast → raisonnement réduit (chat).
+// Single CLI call, with no tools at all (read/write/shell disabled).
+// schema → structured JSON response; otherwise free text. fast → reduced reasoning (chat).
 async function call(provider, input, { schema = null, fast = false, timeoutMs = 300000, lang = 'en' } = {}) {
   const bin = await findBin(provider);
   if (!bin) throw new Error(tr(lang, 'CLI « {p} » introuvable. Connecte ton compte d’abord.', { p: provider }));
@@ -178,7 +178,7 @@ const chatPrompt = lang => `You are the assistant built into Taupe, a disk-space
 `;
 const TOOL_NAMES = ['search_files', 'list_folder', 'big_files', 'open_folder', 'select_items', 'move_to_trash'];
 
-// Conversation « agent » : la CLI de l'IA lance notre serveur MCP (src/mcp.mjs) et n'a accès qu'à ses outils.
+// "Agent" conversation: the AI CLI launches our MCP server (src/mcp.mjs) and can only use its tools.
 export async function chatAgent(provider, context, messages, mcp, onProc, lang = 'en') {
   const bin = await findBin(provider);
   if (!bin) throw new Error(tr(lang, 'CLI « {p} » introuvable. Connecte ton compte d’abord.', { p: provider }));
@@ -209,7 +209,7 @@ export async function chatAgent(provider, context, messages, mcp, onProc, lang =
   }
 }
 
-// ---------- Comptes : statut, connexion, déconnexion ----------
+// ---------- Accounts: status, login, logout ----------
 export const INSTALL = {
   claude: { mac: 'curl -fsSL https://claude.ai/install.sh | bash', win: 'irm https://claude.ai/install.ps1 | iex',
     docs: 'https://docs.claude.com/en/docs/claude-code/setup' },
@@ -250,8 +250,8 @@ export function loginState() {
   return { ...j, output: stripAnsi(j.output).slice(-600) };
 }
 
-// Connexion en un clic : installe l'outil officiel s'il manque, puis lance la connexion.
-// L'état (phase install → login → done/error) est suivi par l'interface via loginState().
+// One-click login: installs the official tool if missing, then starts the login.
+// The state (phase install → login → done/error) is tracked by the UI via loginState().
 export function connect(provider, lang = 'en') {
   if (!PROVIDERS[provider]) throw new Error(tr(lang, 'Fournisseur inconnu'));
   loginCancel();
@@ -271,7 +271,7 @@ export function connect(provider, lang = 'en') {
   })().catch(e => { if (job.status === 'running') Object.assign(job, { status: 'error', output: job.output + '\n' + e.message }); statusAt = 0; });
 }
 
-// Installeurs officiels (Claude Code : script d'Anthropic ; Codex : npm, ou Homebrew sur Mac)
+// Official installers (Claude Code: Anthropic's script; Codex: npm, or Homebrew on Mac)
 async function runInstaller(provider, job, lang = 'en') {
   let cmd, args;
   if (provider === 'claude') {

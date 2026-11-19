@@ -4,7 +4,7 @@
 export const pickLang = l => (String(l || '').toLowerCase().startsWith('fr') ? 'fr' : 'en');
 
 const EN = {
-  // Erreurs de l'API
+  // API errors
   'Élément introuvable (supprimé ou pas encore scanné)': 'Item not found (deleted or not scanned yet)',
   'Dossier introuvable dans le scan : {p}': 'Folder not found in the scan: {p}',
   'Ce n’est pas un dossier : {p}': 'Not a folder: {p}',
@@ -25,7 +25,7 @@ const EN = {
   'Non déplacé': 'Not moved',
   'L’élément a changé depuis l’affichage — recharge': 'The item changed since it was displayed — reload',
 
-  // Suggestions (règles)
+  // Suggestions (rules)
   'Caches de build (.next, .turbo…)': 'Build caches (.next, .turbo…)',
   'Recréés automatiquement au prochain build ou « npm run dev ».': 'Recreated automatically on the next build or “npm run dev”.',
   'node_modules de projets dormants': 'node_modules of dormant projects',
@@ -59,7 +59,7 @@ const EN = {
   'du {date}': 'from {date}',
   'moins d’un jour': 'less than a day', '{n} jours': '{n} days', '{n} mois': '{n} months', '{n} ans': '{n} years',
 
-  // Onglet Nettoyable
+  // Cleanable tab
   'Dépendances npm': 'npm dependencies', 'Régénérable avec npm install / bun install': 'Regenerate with npm install / bun install',
   'Cache de build front': 'Front-end build cache', 'Recréé au prochain build': 'Recreated on the next build',
   'Environnement Python': 'Python environment', 'Recréable avec pip install -r requirements.txt': 'Recreate with pip install -r requirements.txt',
@@ -77,12 +77,12 @@ const EN = {
   'Téléchargements': 'Downloads', 'Souvent plein de vieux installeurs': 'Often full of old installers',
   'Archive Xcode': 'Xcode archive', 'Vieilles archives souvent inutiles': 'Old archives are often useless',
 
-  // Raccourcis de l'écran d'accueil
+  // Welcome screen shortcuts
   'Dossier perso': 'Home folder', '~ — le plus utile': '~ — most useful',
   'Disque entier': 'Whole disk', '/ — tout le Mac': '/ — the whole Mac', 'tout le disque': 'the whole disk', 'Disque {d}': 'Drive {d}',
   'Applications': 'Applications',
 
-  // Comptes IA
+  // AI accounts
   'Fournisseur inconnu': 'Unknown provider',
   'CLI « {p} » introuvable. Connecte ton compte d’abord.': '“{p}” CLI not found. Connect your account first.',
   'Installation terminée mais « {p} » reste introuvable. Redémarre Taupe.': 'Installation finished but “{p}” still cannot be found. Restart Taupe.',

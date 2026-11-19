@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <!-- Taupe : carré orange façon macOS (marge transparente) et traces de pattes noires -->
+  <!-- Taupe: macOS-style orange square (transparent margin) and black paw prints -->
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#FF7A26"/>
       <stop offset="1" stop-color="#FF5600"/>
     </linearGradient>
-    <!-- Une patte, centrée sur (0,0), environ 100 unités de haut -->
+    <!-- One paw, centered on (0,0), about 100 units tall -->
     <g id="paw" fill="#0B0B0B">
       <path d="M0 2c-14 0-24 10-31 21-6 9-12 16-12 26 0 12 10 19 22 19 8 0 14-3 21-3s13 3 21 3c12 0 22-7 22-19 0-10-6-17-12-26C24 12 14 2 0 2z"/>
       <ellipse cx="-36" cy="-16" rx="11" ry="14" transform="rotate(-24 -36 -16)"/>
@@ -15,7 +15,7 @@
     </g>
   </defs>
   <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#g)"/>
-  <!-- trace centrée en diagonale, orientée vers le haut à droite -->
+  <!-- trail centered diagonally, heading up and to the right -->
   <use href="#paw" transform="translate(318 708) rotate(42) scale(1.72)"/>
   <use href="#paw" transform="translate(522 504) rotate(42) scale(1.58)"/>
   <use href="#paw" transform="translate(712 300) rotate(42) scale(1.44)"/>
