@@ -37,9 +37,11 @@
     </div>
     <div class="chatmsgs" id="chatMsgs"></div>
     <form class="chatform" id="chatForm">
+      <div id="chatConnect" hidden></div>
       <textarea id="chatInput" rows="2" placeholder="Pose une question sur ce dossier… (Entrée pour envoyer)"></textarea>
       <div class="chatbar">
         <select id="chatProv" title="Modèle utilisé (ton abonnement)"></select>
+        <span id="chatAdd"></span>
         <span class="grow"></span>
         <button class="btn primary sm" id="chatSend" type="submit">Envoyer</button>
       </div>

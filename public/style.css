@@ -497,5 +497,66 @@ input[type=checkbox]:disabled { opacity: .25 !important; cursor: default; }
 .cx-wait .spin { margin-top: 2px; }
 .cx-code { align-self: stretch; }
 
+/* ==============================================================   Assistant : fil d'actions animé (ce que fait l'IA, en direct)
+   ===================================================================== */
+.acts { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 8px; }
+.act { display: grid; grid-template-columns: 14px 1fr; column-gap: 6px; align-items: start; font-size: 12px; color: var(--muted); animation: actIn .28s ease-out both; }
+.act > .lbl { line-height: 1.4; }
+.act > .asub, .act > .scanbar { grid-column: 2; }
+.act .ap { color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+.act .dot { width: 6px; height: 6px; border-radius: 50%; margin: 5px 0 0 4px; background: color-mix(in srgb, var(--muted) 60%, transparent); }
+.act.running .dot { background: var(--orange); animation: pulse 1.1s ease-in-out infinite; }
+.act.done .dot, .act.trash.done .dot { background: var(--orange); }
+.act.refused .dot, .act.expired .dot { background: transparent; box-shadow: inset 0 0 0 1px var(--muted); }
+.act.running .lbl { color: var(--text);
+  background: linear-gradient(90deg, var(--text) 0%, var(--text) 40%, var(--orange) 50%, var(--text) 60%, var(--text) 100%);
+  background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: shimmer 1.6s linear infinite; }
+.act.running .lbl .ap { -webkit-text-fill-color: currentColor; color: var(--muted); }
+.act .asub { font-size: 11px; color: var(--muted); opacity: .8; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act .freed { color: var(--orange); font-weight: 600; }
+.scanbar { height: 2px; margin-top: 5px; border-radius: 2px; overflow: hidden; background: color-mix(in srgb, var(--muted) 15%, transparent); position: relative; }
+.scanbar::after { content: ''; position: absolute; inset: 0; width: 35%; background: var(--orange); border-radius: 2px; animation: scan 1s ease-in-out infinite; }
+.act.think { animation-delay: .15s; }
+
+/* Carte de confirmation (suppression proposée par l'IA) */
+.act.trash.pending { display: block; }
+.tcard { border: 1px solid color-mix(in srgb, var(--orange) 45%, var(--line)); border-radius: 10px; padding: 10px 11px; color: var(--text);
+  background: color-mix(in srgb, var(--orange) 5%, transparent); animation: cardIn .3s cubic-bezier(.2, .9, .3, 1.2) both; }
+.thead2 { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; }
+.thead2 b { font-weight: 600; }
+.tsize { color: var(--orange); white-space: nowrap; }
+.treason { margin: 4px 0 6px; color: var(--muted); font-size: 11.5px; line-height: 1.45; }
+.tlist { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; max-height: 140px; overflow: auto; }
+.tlist div { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; }
+.tlist span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
+.tlist b { font-weight: 500; white-space: nowrap; }
+.tbtns { display: flex; gap: 6px; }
+#chatSend.stop { background: transparent; color: var(--text); border-color: var(--line); }
+
+/* L'interface réagit à ce que fait l'IA */
+.ai-flash { animation: aiflash 1.4s ease-out; }
+
+@keyframes actIn { from { opacity: 0; transform: translateY(4px); } }
+@keyframes cardIn { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+@keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.6); opacity: .45; } }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+@keyframes scan { 0% { left: -35%; } 100% { left: 100%; } }
+@keyframes aiflash { 0% { background-color: color-mix(in srgb, var(--orange) 35%, transparent); } 100% { background-color: transparent; } }
+@media (prefers-reduced-motion: reduce) { .act, .tcard, .ai-flash, .scanbar::after, .act.running .dot, .act.running .lbl { animation: none !important; } }
+/* Carte de confirmation : liste complète, cases à cocher */
+.tlist { max-height: 220px; gap: 0; }
+.titem { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 7px; align-items: center; padding: 3px 2px; font-size: 11px; border-radius: 5px; cursor: pointer; }
+.titem:hover { background: color-mix(in srgb, var(--orange) 8%, transparent); }
+.titem span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
+.titem input:not(:checked) ~ span, .titem input:not(:checked) ~ b { opacity: .4; text-decoration: line-through; }
+.titem b { font-weight: 500; white-space: nowrap; }
+.ttools { display: flex; gap: 2px; margin: -2px 0 4px -4px; }
+.ttools .linkbtn { font-size: 11px; }
+
+/* Connecter un deuxième compte depuis l'assistant */
+#chatAdd { display: flex; gap: 2px; }
+#chatAdd .linkbtn { font-size: 11.5px; }
+#chatConnect { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 12px; }
+=======
 /* Logo : une trace de patte orange */
 .logo-paw { width: 17px; height: 20px; fill: var(--orange); transform: rotate(18deg); flex: none; }

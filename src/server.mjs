@@ -12,6 +12,9 @@ import * as ai from './ai.mjs';
 import { HOME, PLATFORM, IS_MAC, expand, isProtected, places, fallbackActions } from './platform.mjs';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
+// Script MCP lancé par la CLI de l'IA : en production il est extrait de l'archive asar (asarUnpack)
+const MCP_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'mcp.mjs').replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+const DEMO = process.env.TAUPE_DEMO_AI === '1';
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
 class HttpError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
@@ -20,7 +23,7 @@ async function volume(p) {
   try { const v = await fsp.statfs(p); return { total: v.blocks * v.bsize, free: v.bavail * v.bsize }; } catch { return null; }
 }
 
-export function startServer({ port = 0, actions = fallbackActions, app = false, version = '' } = {}) {
+export function startServer({ port = 0, actions = fallbackActions, app = false, version = '', testing = false } = {}) {
   const TOKEN = crypto.randomBytes(18).toString('hex');
   const session = new Session();
   const sep = path.sep;
@@ -47,6 +50,113 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
     return j;
   }
 
+  // Met à la Corbeille des éléments déjà validés ({id, path, size}) ; refuse les chemins protégés
+  async function trashItems(items) {
+    // si un dossier ET son contenu sont demandés, on ne garde que le dossier
+    const top = items.filter(it => !items.some(o => o !== it && it.path.startsWith(o.path + sep)));
+    const todo = [], failed = [];
+    for (const it of top) (isProtected(it.path) ? failed.push({ ...it, error: 'Chemin protégé (système ou dossier principal)' }) : todo.push(it));
+    const errors = todo.length ? await actions.trash(todo.map(t => t.path)) : {};
+    const done = [];
+    for (const it of todo) {
+      let gone = false; try { await fsp.lstat(it.path); } catch { gone = true; }
+      if (gone) { session.store.unlink(it.id); done.push(it); } else failed.push({ ...it, error: errors[it.path] || 'Non déplacé' });
+    }
+    return { done, failed, freed: done.reduce((a, t) => a + t.size, 0) };
+  }
+
+  // ----- Conversations : l'IA agit via les outils MCP, chaque action devient un événement animé -----
+  const chats = new Map();
+  let selfUrl = '';
+  const ev = (chat, e) => { e.i = chat.events.length; e.t = Date.now(); e.status ??= 'running'; chat.events.push(e); return e; };
+  const find = p => { const id = session.idOf(expand(String(p || '').replace(/[\\/]+$/, ''))); return id >= 0 && session.valid(id) ? id : -1; };
+  const item = id => { const r = session.row(id); return { id, path: session.pathOf(id), name: r.name, size: r.size, dir: r.dir, count: r.count, mtime: r.mtime }; };
+  const folderOf = (chat, p) => {
+    const id = p ? find(p) : chat.folder;
+    if (id < 0 || !session.valid(id)) throw new HttpError(404, `Dossier introuvable dans le scan : ${p}`);
+    if (!session.row(id).dir) throw new HttpError(400, `Ce n’est pas un dossier : ${p}`);
+    return id;
+  };
+  const clamp = (v, d, max) => Math.max(1, Math.min(max, Number(v) || d));
+  const pause = ms => new Promise(r => setTimeout(r, ms)); // laisse le temps de voir l'animation
+  const TOOL_IMPL = {
+    async search_files(c, a) {
+      const f = folderOf(c, a.folder);
+      const e = ev(c, { type: 'search', query: String(a.query || ''), folder: session.pathOf(f) });
+      await pause(400);
+      const res = session.search(f, a.query, clamp(a.limit, 30, 200)).map(item);
+      Object.assign(e, { status: 'done', count: res.length, top: res.slice(0, 3).map(r => r.path) });
+      return { folder: e.folder, results: res.map(({ id, ...r }) => r) };
+    },
+    async list_folder(c, a) {
+      const f = folderOf(c, a.path);
+      const e = ev(c, { type: 'list', path: session.pathOf(f) });
+      await pause(300);
+      const l = session.list(f, 80);
+      Object.assign(e, { status: 'done', count: l.children.length });
+      return { path: l.path, size: l.node.size, files: l.node.count,
+        children: l.children.map(r => ({ path: session.pathOf(r.id), size: r.size, dir: r.dir, files: r.count, mtime: r.mtime })) };
+    },
+    async big_files(c, a) {
+      const f = folderOf(c, a.folder);
+      const e = ev(c, { type: 'big', folder: session.pathOf(f) });
+      await pause(400);
+      const res = session.bigFiles(f, clamp(a.limit, 20, 100)).map(r => item(r.id));
+      Object.assign(e, { status: 'done', count: res.length, top: res.slice(0, 3).map(r => r.path) });
+      return { folder: e.folder, files: res.map(({ id, ...r }) => r) };
+    },
+    async open_folder(c, a) {
+      const f = folderOf(c, a.path);
+      ev(c, { type: 'open', id: f, path: session.pathOf(f), status: 'done' });
+      return { ok: true, opened: session.pathOf(f) };
+    },
+    async select_items(c, a) {
+      const ids = [], skipped = [];
+      for (const p of (a.paths || []).slice(0, 500)) { const id = find(p); id >= 0 ? ids.push(id) : skipped.push(String(p)); }
+      const items = ids.map(item);
+      ev(c, { type: 'select', items, total: items.reduce((t, x) => t + x.size, 0), skipped, status: 'done' });
+      return { selected: items.length, skipped };
+    },
+    async move_to_trash(c, a) {
+      const ids = [], skipped = [];
+      for (const p of (a.paths || []).slice(0, 500)) { const id = find(p); id >= 0 ? ids.push(id) : skipped.push(String(p)); }
+      const items = ids.map(item), prot = items.filter(x => isProtected(x.path)), ok = items.filter(x => !isProtected(x.path));
+      if (!ok.length) return { trashed: [], refused: prot.map(x => x.path), skipped, message: 'Rien à mettre à la corbeille (chemins protégés ou introuvables).' };
+      const e = ev(c, { type: 'trash', items: ok, protected: prot.map(x => x.path), skipped, reason: String(a.reason || ''),
+        total: ok.reduce((t, x) => t + x.size, 0), status: 'pending' });
+      let timer;
+      const accept = await new Promise(res => {
+        c.pending.set(e.i, res);
+        timer = setTimeout(() => res(null), 5 * 60e3);
+      });
+      clearTimeout(timer);
+      c.pending.delete(e.i);
+      if (!accept) { e.status = accept === null ? 'expired' : 'refused'; return { trashed: [], message: accept === null ? 'Pas de réponse de l’utilisateur.' : 'L’utilisateur a refusé.' }; }
+      // l'utilisateur a pu décocher certains éléments avant de confirmer
+      const chosen = accept.paths ? ok.filter(x => accept.paths.includes(x.path)) : ok;
+      const kept = ok.filter(x => !chosen.includes(x)).map(x => x.path);
+      if (!chosen.length) { e.status = 'refused'; return { trashed: [], kept, message: 'L’utilisateur a tout décoché.' }; }
+      Object.assign(e, { status: 'trashing', chosen: chosen.length, kept });
+      const r = await trashItems(chosen.filter(x => session.valid(x.id) && session.pathOf(x.id) === x.path));
+      Object.assign(e, { status: 'done', freed: r.freed, done: r.done.length, failed: r.failed.map(f => ({ path: f.path, error: f.error })) });
+      return { trashed: r.done.map(x => x.path), kept_by_user: kept, failed: e.failed, freed_bytes: r.freed, protected: e.protected };
+    },
+  };
+
+  // Agent de démonstration (TAUPE_DEMO_AI=1, développement uniquement) : enchaîne de vraies actions sans IA
+  async function demoAgent(c) {
+    await pause(900);
+    const s = await TOOL_IMPL.search_files(c, { query: 'node_modules' });
+    await pause(500);
+    await TOOL_IMPL.big_files(c, { limit: 5 });
+    if (!s.results.length) return 'Je n’ai trouvé aucun dossier `node_modules` ici.';
+    await pause(400);
+    await TOOL_IMPL.select_items(c, { paths: s.results.slice(0, 3).map(r => r.path) });
+    await pause(700);
+    const t = await TOOL_IMPL.move_to_trash(c, { paths: s.results.map(r => r.path), reason: 'Dépendances npm : un « npm install » les recrée.' });
+    return t.trashed?.length ? `J’ai mis ${t.trashed.length} dossiers \`node_modules\` à la corbeille.` : 'D’accord, je n’ai rien supprimé.';
+  }
+
   const api = {
     'GET /api/status': async () => ({ ...session.status(), home: HOME, platform: PLATFORM, app, version, sep,
       places: places(), canPick: app, volume: await volume(session.rootPath || HOME) }),
@@ -67,7 +177,8 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
     'GET /api/suggest': (_, q) => session.suggestions(needId(q.get('id'))),
 
     // ----- IA : comptes -----
-    'GET /api/ai': async (_, q) => ({ job: aiView(), providers: await ai.statusAll(q.get('refresh') === '1'), labels: ai.PROVIDERS, login: ai.loginState() }),
+    'GET /api/ai': async (_, q) => ({ job: aiView(), labels: ai.PROVIDERS, login: ai.loginState(),
+      providers: { ...await ai.statusAll(q.get('refresh') === '1'), ...(DEMO ? { demo: { installed: true, loggedIn: true, detail: 'Agent de démonstration' } } : {}) } }),
     'POST /api/ai/connect': b => { ai.connect(b.provider); return { ok: true }; },
     'POST /api/ai/login/code': b => { ai.loginCode(String(b.code || '')); return { ok: true }; },
     'POST /api/ai/login/cancel': () => { ai.loginCancel(); return { ok: true }; },
@@ -79,9 +190,9 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
     },
 
     // ----- IA : chat + analyse -----
-    'POST /api/chat': async b => {
+    'POST /api/chat/start': async b => {
       const id = needId(b.id);
-      const provider = ai.PROVIDERS[b.provider] ? b.provider : 'claude';
+      const provider = ai.PROVIDERS[b.provider] || (DEMO && b.provider === 'demo') ? b.provider : 'claude';
       const msgs = (Array.isArray(b.messages) ? b.messages : []).filter(m => m && typeof m.content === 'string');
       if (!msgs.length) throw new HttpError(400, 'Message vide');
       let ctx = session.chatContext(id);
@@ -91,9 +202,41 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
       const sel = (b.selection || []).filter(p => typeof p === 'string').slice(0, 50);
       if (sel.length) ctx += `\n\n## Éléments actuellement cochés par l'utilisateur\n${sel.join('\n')}`;
       if (session.scanning) ctx += '\n\n(Le scan est encore en cours : les tailles peuvent être incomplètes.)';
-      const t = Date.now();
-      const answer = await ai.chat(provider, ctx, msgs);
-      return { answer, links: session.linksIn(answer), ms: Date.now() - t, provider };
+      const chat = { id: crypto.randomBytes(8).toString('hex'), folder: id, provider, status: 'running', events: [], pending: new Map(),
+        answer: '', links: [], error: '', started: Date.now(), ended: 0, proc: null };
+      chats.set(chat.id, chat);
+      for (const [k, c] of chats) if (Date.now() - c.started > 3600e3) chats.delete(k); // ménage
+      const mcp = { command: process.execPath, args: [MCP_PATH],
+        env: { ELECTRON_RUN_AS_NODE: '1', TAUPE_URL: selfUrl, TAUPE_TOKEN: TOKEN, TAUPE_CHAT: chat.id } };
+      (provider === 'demo' ? demoAgent(chat) : ai.chatAgent(provider, ctx, msgs, mcp, p => (chat.proc = p)))
+        .then(answer => Object.assign(chat, { status: 'done', answer, links: session.linksIn(answer) }))
+        .catch(e => { if (chat.status === 'running') Object.assign(chat, { status: 'error', error: e.message }); })
+        .finally(() => { chat.ended = Date.now(); for (const r of chat.pending.values()) r(false); });
+      return { chat: chat.id };
+    },
+    'GET /api/chat/events': (_, q) => {
+      const c = chats.get(q.get('chat'));
+      if (!c) throw new HttpError(404, 'Conversation introuvable');
+      return { status: c.status, events: c.events, answer: c.answer, links: c.links, error: c.error,
+        ms: (c.ended || Date.now()) - c.started, provider: c.provider };
+    },
+    'POST /api/chat/confirm': b => {
+      const c = chats.get(b.chat), r = c?.pending.get(Number(b.event));
+      if (!r) throw new HttpError(404, 'Plus rien à confirmer');
+      r(b.accept ? { paths: Array.isArray(b.paths) ? b.paths.map(String) : null } : false); return { ok: true };
+    },
+    'POST /api/chat/cancel': b => {
+      const c = chats.get(b.chat);
+      if (c?.status === 'running') { c.status = 'cancelled'; try { c.proc?.kill(); } catch {} for (const r of c.pending.values()) r(false); }
+      return { ok: true };
+    },
+    // Appelé par le serveur MCP (src/mcp.mjs) quand l'IA utilise un outil
+    'POST /api/tool': async b => {
+      const c = chats.get(b.chat);
+      if (!c || c.status !== 'running') throw new HttpError(409, 'Conversation terminée');
+      const fn = TOOL_IMPL[b.name];
+      if (!fn) throw new HttpError(404, `Outil inconnu : ${b.name}`);
+      return fn(c, b.args || {});
     },
     'POST /api/ai/start': async b => {
       if (aiJob?.status === 'running') throw new HttpError(409, 'Une analyse IA est déjà en cours');
@@ -134,17 +277,8 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
         if (session.valid(id) && session.pathOf(id) === it.path) items.push({ id, path: it.path, size: session.store.size[id] });
         else failed.push({ id, path: String(it.path), size: 0, error: 'L’élément a changé depuis l’affichage — recharge' });
       }
-      // si un dossier ET son contenu sont sélectionnés, on ne garde que le dossier
-      const top = items.filter(it => !items.some(o => o !== it && it.path.startsWith(o.path + sep)));
-      const todo = [];
-      for (const it of top) (isProtected(it.path) ? failed.push({ ...it, error: 'Chemin protégé (système ou dossier principal)' }) : todo.push(it));
-      const errors = todo.length ? await actions.trash(todo.map(t => t.path)) : {};
-      const done = [];
-      for (const it of todo) {
-        let gone = false; try { await fsp.lstat(it.path); } catch { gone = true; }
-        if (gone) { session.store.unlink(it.id); done.push(it); } else failed.push({ ...it, error: errors[it.path] || 'Non déplacé' });
-      }
-      return { done, failed, freed: done.reduce((a, t) => a + t.size, 0) };
+      const r = await trashItems(items);
+      return { done: r.done, failed: [...failed, ...r.failed], freed: r.freed };
     },
   };
 
@@ -196,7 +330,15 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
     });
     server.on('listening', () => {
       PORT = server.address().port;
-      resolve({ port: PORT, url: `http://127.0.0.1:${PORT}/`, close: () => server.close() });
+      selfUrl = `http://127.0.0.1:${PORT}/`;
+      const out = { port: PORT, url: selfUrl, close: () => { server.close(); server.closeAllConnections?.(); } };
+      // Tests uniquement : ouvre une conversation sans lancer d'IA, pour piloter les outils MCP à la main
+      if (testing) out.testChat = () => {
+        const c = { id: crypto.randomBytes(8).toString('hex'), folder: session.rootId, status: 'running', events: [], pending: new Map(), started: Date.now() };
+        chats.set(c.id, c);
+        return { chat: c.id, token: TOKEN, mcp: MCP_PATH };
+      };
+      resolve(out);
     });
     server.listen(PORT, '127.0.0.1');
   });

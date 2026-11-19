@@ -494,10 +494,10 @@ function openRow(r) { if (r.dir && !r.skip) action('go', r); else action('open',
 
 // ---------- Chat IA contextuel ----------
 let chatOpen = lsGet('taupe.chatOpen') !== '0';
-let CHAT = (() => { try { return JSON.parse(lsGet('taupe.chat') || '[]'); } catch { return []; } })();
+let CHAT = (() => { try { return JSON.parse(lsGet('taupe.chat') || '[]').map(m => m.pending ? { ...m, pending: false, error: true, content: 'Interrompu.' } : m); } catch { return []; } })();
 let chatBusy = false, chatTimer = null;
-const CHAT_IDEAS = ['Qu’est-ce qui prend le plus de place ici ?', 'Qu’est-ce que je peux supprimer sans risque ?',
-  'C’est quoi ces dossiers ? À quoi ils servent ?', 'Est-ce que je peux supprimer ma sélection ?'];
+const CHAT_IDEAS = ['Qu’est-ce qui prend le plus de place ici ?', 'Trouve tous les node_modules et sélectionne-les',
+  'Montre-moi mes plus gros fichiers', 'Supprime les vieux installeurs .dmg', 'C’est quoi ces dossiers ?'];
 const saveChat = () => lsSet('taupe.chat', JSON.stringify(CHAT.slice(-40)));
 
 // Mini-markdown : blocs de code, `code` (→ liens cliquables si chemin connu), **gras**, listes, titres
@@ -523,43 +523,146 @@ function renderChat() {
       ? `<div class="onboard"><b>Connecte ton IA</b>
           <p>Pose des questions sur tes dossiers avec ton abonnement Claude ou ChatGPT. Pas de clé API, pas de frais en plus.</p>
           ${connectBlock()}</div>`
-      : `<div class="chatempty"><p>Pose-moi des questions sur le dossier affiché : je vois les noms, tailles et dates (pas le contenu de tes fichiers).</p>
+      : `<div class="chatempty"><p>Demande-moi d’explorer, de trouver ou de faire le ménage dans le dossier affiché. Je vois les noms, tailles et dates — pas le contenu de tes fichiers — et je te demande toujours avant de supprimer.</p>
           ${CHAT_IDEAS.map(q => `<button class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
     return;
   }
-  box.innerHTML = CHAT.map(m => m.role === 'user'
+  const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  box.innerHTML = CHAT.map((m, mi) => m.role === 'user'
     ? `<div class="msg user">${esc(m.content).replace(/\n/g, '<br>')}</div>`
-    : `<div class="msg bot${m.error ? ' err' : ''}">${m.error ? esc(m.content) : mdLite(m.content, m.links)}
-        <div class="msgmeta">${esc(AI_LABEL[m.provider] || m.provider || '')}${m.ms ? ` · ${Math.round(m.ms / 1000)} s` : ''}${m.ctx ? ` · ${esc(pretty(m.ctx))}` : ''}</div></div>`).join('') +
-    (chatBusy ? `<div class="msg bot pending"><span class="spin"></span> <span id="chatWait">Réflexion…</span></div>` : '');
-  box.scrollTop = box.scrollHeight;
+    : `<div class="msg bot${m.error ? ' err' : ''}">
+        ${m.events?.length ? `<div class="acts">${m.events.map(e => renderAct(e, m)).join('')}</div>` : ''}
+        ${m.pending && !m.events?.some(e => e.status === 'running' || e.status === 'pending' || e.status === 'trashing')
+          ? `<div class="act running think"><i class="dot"></i><span class="lbl">${m.events?.length ? 'Réfléchit…' : 'Lit le dossier et réfléchit…'}</span></div>` : ''}
+        ${m.pending ? '' : m.error ? esc(m.content) : mdLite(m.content || '', m.links)}
+        ${m.pending ? '' : `<div class="msgmeta">${esc(AI_LABEL[m.provider] || m.provider || '')}${m.ms ? ` · ${Math.round(m.ms / 1000)} s` : ''}${m.ctx ? ` · <span title="${esc(m.ctx)}">${esc(short(m.ctx))}</span>` : ''}</div>`}
+      </div>`).join('');
+  for (const c of box.querySelectorAll('.tcard[data-card]')) updateTrashCard(c);
+  if (stick) box.scrollTop = box.scrollHeight;
 }
-const AI_LABEL = { claude: 'Claude', codex: 'ChatGPT' };
+const AI_LABEL = { claude: 'Claude', codex: 'ChatGPT', demo: 'Démo' };
 
+// Une action de l'IA, animée tant qu'elle est en cours
+const q = s => `« ${esc(s)} »`;
+// Chemin court lisible (2 derniers segments), chemin complet au survol
+const short = p => { const parts = String(p).split(SEP).filter(Boolean); return (parts.length > 2 ? '…' + SEP : (p.startsWith(SEP) ? SEP : '')) + parts.slice(-2).join(SEP); };
+const where = p => `<span class="ap" title="${esc(p)}">${esc(short(p))}</span>`;
+const relTo = (base, p) => (base && p.startsWith(base.endsWith(SEP) ? base : base + SEP) ? p.slice(base.length).replace(/^[\\/]/, '') : short(p));
+const TRASH_OFF = new Map(); // éléments décochés dans une carte de confirmation (clé chat:événement)
+function renderAct(e, m) {
+  const run = e.status === 'running', k = `act ${e.type} ${run ? 'running' : e.status}`;
+  const line = (label, extra = '') => `<div class="${k}"><i class="dot"></i><span class="lbl">${label}</span>${extra}</div>`;
+  const rel = p => relTo(m.ctx, p);
+  const top = e.top?.length ? `<div class="asub">${e.top.map(p => esc(rel(p))).join(' · ')}</div>` : '';
+  switch (e.type) {
+    case 'search': return line(run ? `Recherche ${q(e.query)} dans ${where(e.folder)}…` : `Recherche ${q(e.query)} — ${e.count} résultat${e.count > 1 ? 's' : ''}`, run ? '<div class="scanbar"></div>' : top);
+    case 'big': return line(run ? `Repère les plus gros fichiers de ${where(e.folder)}…` : `Plus gros fichiers de ${where(e.folder)}`, run ? '<div class="scanbar"></div>' : top);
+    case 'list': return line(run ? `Ouvre et lit ${where(e.path)}…` : `Lit ${where(e.path)} — ${e.count} éléments`, run ? '<div class="scanbar"></div>' : '');
+    case 'open': return line(`Affiche ${where(e.path)}`);
+    case 'select': return line(`Sélectionne ${e.items.length} élément${e.items.length > 1 ? 's' : ''} · ${fmtSize(e.total)}`,
+      `<div class="asub">${e.items.slice(0, 4).map(x => esc(rel(x.path))).join(' · ')}${e.items.length > 4 ? ` · +${e.items.length - 4}` : ''}</div>`);
+    case 'trash': {
+      if (e.status === 'pending') {
+        const key = `${m.chat}:${e.i}`, off = TRASH_OFF.get(key) || new Set();
+        const rows = e.items.map(x => `<label class="titem"><input type="checkbox" data-tpick="${key}" data-path="${esc(x.path)}"${off.has(x.path) ? '' : ' checked'}>
+          <span title="${esc(x.path)}">${esc(rel(x.path))}</span><b>${fmtSize(x.size)}</b></label>`).join('');
+        return `<div class="act trash pending"><div class="tcard" data-card="${key}">
+          <div class="thead2"><b class="tcount"></b><b class="tsize"></b></div>
+          ${e.reason ? `<p class="treason">${esc(e.reason)}</p>` : ''}
+          ${e.items.length > 1 ? `<div class="ttools"><button class="linkbtn" data-tall="${key}" data-on="1">Tout cocher</button><button class="linkbtn" data-tall="${key}" data-on="0">Tout décocher</button></div>` : ''}
+          <div class="tlist">${rows}</div>
+          <div class="tbtns"><button class="btn danger sm tgo" data-confirm="${e.i}" data-chat="${m.chat}" data-accept="1"></button>
+          <button class="btn sm" data-confirm="${e.i}" data-chat="${m.chat}" data-accept="0">Non</button></div></div></div>`;
+      }
+      if (e.status === 'trashing') return line(`Met ${e.items.length} élément${e.items.length > 1 ? 's' : ''} à la corbeille…`, '<div class="scanbar"></div>');
+      if (e.status === 'done') return line(`${e.done} élément${e.done > 1 ? 's' : ''} à la corbeille · <b class="freed">${fmtSize(e.freed)}</b> libérés${e.kept?.length ? ` · ${e.kept.length} gardé${e.kept.length > 1 ? 's' : ''}` : ''}${e.failed?.length ? ` · ${e.failed.length} échec(s)` : ''}`);
+      return line(e.status === 'refused' ? 'Suppression refusée' : 'Suppression non confirmée');
+    }
+  }
+  return '';
+}
+
+// Effets d'une action sur l'interface (une seule fois, au moment où elle arrive ou se termine)
+function applyAct(e, prev) {
+  if (e.type === 'open' && !prev) {
+    if (S.tab !== 'content') setTabSilently('content');
+    navigate(e.id).then(() => flash(document.querySelector('.summary h2')));
+  }
+  if (e.type === 'select' && !prev) {
+    for (const x of e.items) S.sel.set(x.id, { id: x.id, path: x.path, size: x.size, name: x.name, dir: x.dir });
+    updateSelBar();
+    if (S.tab === 'content' || S.tab === 'big' || S.tab === 'hogs') renderList();
+    for (const x of e.items) flash(document.querySelector(`.row[data-i="${S.view.findIndex(r => r.id === x.id)}"]`));
+  }
+  if (e.type === 'trash' && e.status === 'done' && prev?.status !== 'done') {
+    for (const x of e.items) S.sel.delete(x.id);
+    updateSelBar(); load();
+    toast(`${e.done} élément${e.done > 1 ? 's' : ''} à la corbeille · <b>${fmtSize(e.freed)}</b> libérés`, 'ok');
+  }
+}
+function updateTrashCard(card) {
+  const boxes = [...card.querySelectorAll('input[data-tpick]')], on = boxes.filter(b => b.checked);
+  const sizes = new Map(); for (const m of CHAT) for (const e of m.events || []) if (e.type === 'trash') for (const x of e.items) sizes.set(x.path, x.size);
+  const total = on.reduce((t, b) => t + (sizes.get(b.dataset.path) || 0), 0);
+  card.querySelector('.tcount').textContent = boxes.length > 1 ? `Mettre à la corbeille ${on.length} sur ${boxes.length} éléments ?` : 'Mettre cet élément à la corbeille ?';
+  card.querySelector('.tsize').textContent = fmtSize(total);
+  const go = card.querySelector('.tgo');
+  go.textContent = on.length > 1 ? `Mettre ${on.length} éléments à la corbeille` : 'Mettre à la corbeille';
+  go.disabled = !on.length;
+}
+const flash = el => { if (!el) return; el.classList.remove('ai-flash'); void el.offsetWidth; el.classList.add('ai-flash'); };
+function setTabSilently(tab) { S.tab = tab; for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === tab); }
+
+let chatPoll = null;
 async function sendChat(text) {
   text = text.trim();
   if (!text || chatBusy || S.cur == null) return;
   const provider = $('#chatProv').value || 'claude';
   lsSet('taupe.ai', provider);
+  const history = CHAT.filter(m => !m.error && !m.pending && m.content).map(m => ({ role: m.role, content: m.content }));
   CHAT.push({ role: 'user', content: text });
-  chatBusy = true; $('#chatSend').disabled = true; $('#chatInput').value = '';
+  const msg = { role: 'assistant', provider, pending: true, events: [], ctx: S.data?.path };
+  CHAT.push(msg);
+  setBusy(true); $('#chatInput').value = '';
   renderChat();
-  const t0 = Date.now();
-  chatTimer = setInterval(() => { const w = $('#chatWait'); if (w) w.textContent = `Réflexion… ${Math.round((Date.now() - t0) / 1000)} s`; }, 1000);
-  const ctx = S.data?.path;
   try {
-    const r = await post('/api/chat', { id: S.cur, provider, selection: selItems().map(i => i.path),
-      messages: CHAT.filter(m => !m.error).map(m => ({ role: m.role, content: m.content })) });
-    CHAT.push({ role: 'assistant', content: r.answer, links: r.links, provider, ms: r.ms, ctx });
-  } catch (e) {
-    const auth = /authenticat|login|logged|expired|401|unauthorized/i.test(e.message);
-    CHAT.push({ role: 'assistant', error: true, provider, content: e.message.slice(0, 400) +
-      (auth ? `\n\nTon compte n’est pas connecté : clique sur « Comptes » en haut de l’assistant.` : '') });
+    const r = await post('/api/chat/start', { id: S.cur, provider, selection: selItems().map(i => i.path),
+      messages: [...history, { role: 'user', content: text }] });
+    msg.chat = r.chat;
+    pollChat(msg);
+  } catch (e) { endChat(msg, { status: 'error', error: e.message }); }
+}
+async function pollChat(msg) {
+  let r;
+  try { r = await get(`/api/chat/events?chat=${msg.chat}`); } catch (e) { return endChat(msg, { status: 'error', error: e.message }); }
+  const changed = JSON.stringify(r.events) !== JSON.stringify(msg.events);
+  for (const e of r.events) { const prev = msg.events[e.i]; if (!prev || prev.status !== e.status) applyAct(e, prev); }
+  msg.events = r.events;
+  if (r.status === 'running') { if (changed) renderChat(); chatPoll = setTimeout(() => pollChat(msg), 350); return; }
+  endChat(msg, r);
+}
+function endChat(msg, r) {
+  clearTimeout(chatPoll);
+  msg.pending = false; msg.ms = r.ms;
+  if (r.status === 'done') Object.assign(msg, { content: r.answer, links: r.links });
+  else if (r.status === 'cancelled') Object.assign(msg, { content: 'Arrêté.', cancelled: true });
+  else {
+    const auth = /authenticat|login|logged|expired|401|unauthorized/i.test(r.error || '');
+    Object.assign(msg, { error: true, content: (r.error || 'Erreur inconnue').slice(0, 400) +
+      (auth ? '\n\nTon compte n’est pas connecté : clique sur « Comptes » en haut de l’assistant.' : '') });
   }
-  clearInterval(chatTimer);
-  chatBusy = false; $('#chatSend').disabled = false;
-  saveChat(); renderChat();
+  setBusy(false); saveChat(); renderChat();
   $('#chatInput').focus();
+}
+function setBusy(on) {
+  chatBusy = on;
+  $('#chatSend').textContent = on ? 'Arrêter' : 'Envoyer';
+  $('#chatSend').classList.toggle('stop', on);
+  $('#chatInput').disabled = on || !anyReady();
+}
+async function stopChat() {
+  const m = CHAT[CHAT.length - 1];
+  if (m?.chat) await post('/api/chat/cancel', { chat: m.chat }).catch(() => {});
 }
 
 function openLink(a) {
@@ -570,7 +673,7 @@ function openLink(a) {
 
 // ---------- Comptes IA (Claude / ChatGPT) : connexion en un clic ----------
 let PROVS = null, LOGIN = null, loginTimer = null, lastSig = '';
-const NAME = { claude: 'Claude', codex: 'ChatGPT' };
+const NAME = { claude: 'Claude', codex: 'ChatGPT', demo: 'Démo' };
 const ready = p => !!(p && p.installed && p.loggedIn);
 const anyReady = () => !!PROVS && Object.values(PROVS).some(ready);
 function providerOptions() {
@@ -610,7 +713,14 @@ async function loadProviders(refresh) {
     if (wasRunning && LOGIN?.status === 'done') { toast(`Compte ${esc(NAME[LOGIN.provider])} connecté`, 'ok'); return loadProviders(true); }
     const any = anyReady();
     $('#chatProv').innerHTML = providerOptions();
-    $('#chatInput').disabled = !any; $('#chatSend').disabled = !any || chatBusy; $('#chatProv').hidden = !any;
+    // Connecter un autre compte sans quitter l'assistant (« + ChatGPT » quand Claude est déjà connecté, etc.)
+    const others = any ? Object.keys(PROVS).filter(k => !ready(PROVS[k]) && NAME[k]) : [];
+    const busyLogin = LOGIN?.status === 'running' && others.includes(LOGIN.provider);
+    $('#chatAdd').innerHTML = busyLogin ? '' : others.map(k => `<button type="button" class="linkbtn" data-connect="${k}" title="Connecter aussi ton compte ${NAME[k]}">+ ${NAME[k]}</button>`).join('');
+    const cx = any && (busyLogin || (LOGIN?.status === 'error' && others.includes(LOGIN.provider)));
+    $('#chatConnect').hidden = !cx;
+    if (cx && document.activeElement?.id !== 'loginCode') $('#chatConnect').innerHTML = connectBlock(LOGIN.provider);
+    $('#chatInput').disabled = !any || chatBusy; $('#chatSend').disabled = !any; $('#chatProv').hidden = !any;
     $('#chatInput').placeholder = any ? 'Pose une question sur ce dossier… (Entrée pour envoyer)' : 'Connecte un compte IA pour discuter';
     const typing = document.activeElement?.id === 'loginCode';
     if (changed && !typing) {
@@ -671,11 +781,31 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'loginCode') submitCode(e.target.value); });
 
-$('#chatForm').addEventListener('submit', e => { e.preventDefault(); sendChat($('#chatInput').value); });
+$('#chatForm').addEventListener('submit', e => { e.preventDefault(); chatBusy ? stopChat() : sendChat($('#chatInput').value); });
 $('#chatInput').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(e.target.value); }
 });
-$('#chatMsgs').addEventListener('click', e => {
+$('#chatMsgs').addEventListener('change', e => {
+  const b = e.target.closest('input[data-tpick]'); if (!b) return;
+  const off = TRASH_OFF.get(b.dataset.tpick) || new Set();
+  b.checked ? off.delete(b.dataset.path) : off.add(b.dataset.path);
+  TRASH_OFF.set(b.dataset.tpick, off); updateTrashCard(b.closest('.tcard'));
+});
+$('#chatMsgs').addEventListener('click', async e => {
+  const all = e.target.closest('[data-tall]');
+  if (all) {
+    const card = all.closest('.tcard'), on = all.dataset.on === '1', off = new Set();
+    for (const b of card.querySelectorAll('input[data-tpick]')) { b.checked = on; if (!on) off.add(b.dataset.path); }
+    TRASH_OFF.set(all.dataset.tall, off); updateTrashCard(card); return;
+  }
+  const c = e.target.closest('[data-confirm]');
+  if (c) {
+    const card = c.closest('.tcard');
+    const paths = [...card.querySelectorAll('input[data-tpick]')].filter(b => b.checked).map(b => b.dataset.path);
+    for (const b of card.querySelectorAll('button, input')) b.disabled = true;
+    try { await post('/api/chat/confirm', { chat: c.dataset.chat, event: +c.dataset.confirm, accept: c.dataset.accept === '1', paths }); } catch (err) { toast(esc(err.message), 'err'); }
+    return;
+  }
   const q = e.target.closest('[data-q]'); if (q) return sendChat(q.dataset.q);
   const a = e.target.closest('a.plink'); if (a) { e.preventDefault(); openLink(a); }
 });

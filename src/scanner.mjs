@@ -281,6 +281,19 @@ export class Session {
     }
   }
 
+  // Recherche par nom (insensible à la casse et aux accents) ; un dossier trouvé n'est pas parcouru
+  search(id, query, limit = 30) {
+    const s = this.store, out = [];
+    const norm = t => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const q = norm(String(query || '').trim());
+    if (!q) return out;
+    this._each(id, c => {
+      if (norm(s.names[c]).includes(q)) { out.push(c); return false; }
+    });
+    out.sort((a, b) => s.size[b] - s.size[a]);
+    return out.slice(0, limit);
+  }
+
   bigFiles(id, limit = 300) {
     const s = this.store; let cand = [], thr = 0;
     this._each(id, c => {
