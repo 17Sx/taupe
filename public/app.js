@@ -3,7 +3,12 @@ const TOKEN = document.querySelector('meta[name=token]').content;
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const joinPath = (a, b) => (b ? (a.endsWith('/') ? a + b : a + '/' + b) : a);
+const PLATFORM = document.body.dataset.platform || 'darwin', IS_APP = document.body.dataset.app === '1';
+const IS_WIN = PLATFORM === 'win32', IS_MAC = PLATFORM === 'darwin';
+const SEP = IS_WIN ? '\\' : '/';
+const FM = IS_MAC ? 'Finder' : IS_WIN ? 'Explorateur' : 'Fichiers';
+const TRASH_KEY = IS_MAC ? '⌘⌫' : 'Suppr', MOD = IS_MAC ? '⌘' : 'Ctrl+';
+const joinPath = (a, b) => (b ? (a.endsWith(SEP) ? a + b : a + SEP + b) : a);
 
 async function api(method, url, body) {
   const r = await fetch(url, { method, headers: { 'x-token': TOKEN, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -33,7 +38,7 @@ function relTime(sec) {
 const pct = (a, b) => (b ? (a / b) * 100 : 0);
 const fmtPct = p => (p >= 10 ? Math.round(p) : p >= 0.1 ? p.toFixed(1).replace('.', ',') : p > 0 ? '<0,1' : '0') + ' %';
 let HOME = '';
-const pretty = p => (HOME && (p === HOME || p.startsWith(HOME + '/')) ? '~' + p.slice(HOME.length) : p);
+const pretty = p => (HOME && (p === HOME || p.startsWith(HOME + SEP)) ? '~' + p.slice(HOME.length) : p);
 
 const EMOJI = {};
 for (const [e, list] of Object.entries({
@@ -42,12 +47,38 @@ for (const [e, list] of Object.entries({
   '📕': 'pdf epub', '📝': 'doc docx pages txt md rtf odt', '📊': 'xls xlsx numbers csv ods', '📽️': 'ppt pptx key', '🗄️': 'db sqlite sqlite3 realm', '📜': 'log',
   '⚙️': 'js mjs cjs ts tsx jsx json py rb go rs swift java kt c h cpp m cs php html css scss vue svelte sh yml yaml toml lock sql',
 })) for (const x of list.split(' ')) EMOJI[x] = e;
-function icon(r) {
-  if (r.dir) { if (r.err) return '🔒'; if (r.skip) return '💽'; if (r.pkg) return /\.app$/i.test(r.name) ? '🧩' : '📦'; return '📁'; }
-  if (r.link) return '🔗';
-  const i = r.name.lastIndexOf('.');
-  return (i > 0 && EMOJI[r.name.slice(i + 1).toLowerCase()]) || '📄';
+// Icônes au trait fin (16×16, trait 1.15) — tout en currentColor
+const SVG = {
+  dir: '<path d="M1.75 4.5c0-.55.45-1 1-1h3.4l1.35 1.4h5.75c.55 0 1 .45 1 1v6.35c0 .55-.45 1-1 1H2.75c-.55 0-1-.45-1-1z"/>',
+  file: '<path d="M4.25 1.75h4.9l2.6 2.6v9.9H4.25z"/><path d="M9.15 1.75v2.6h2.6"/>',
+  pkg: '<rect x="2.25" y="2.25" width="11.5" height="11.5" rx="3"/><rect x="5.75" y="5.75" width="4.5" height="4.5" rx="1"/>',
+  lock: '<rect x="3.25" y="7" width="9.5" height="6.75" rx="1.5"/><path d="M5.25 7V5.1a2.75 2.75 0 0 1 5.5 0V7"/>',
+  link: '<rect x="2.25" y="2.25" width="11.5" height="11.5" rx="3"/><path d="M6.25 9.75l3.5-3.5M7 6.25h2.75V9"/>',
+  disk: '<rect x="1.75" y="4.25" width="12.5" height="7.5" rx="2"/><path d="M4.5 8h4.5"/><circle cx="11.5" cy="8" r=".6"/>',
+  home: '<path d="M2.5 7.1L8 2.75l5.5 4.35v6.15c0 .3-.2.5-.5.5H9.75V9.9h-3.5v3.85H3c-.3 0-.5-.2-.5-.5z"/>',
+  apps: '<rect x="2.25" y="2.25" width="4.75" height="4.75" rx="1.3"/><rect x="9" y="2.25" width="4.75" height="4.75" rx="1.3"/><rect x="2.25" y="9" width="4.75" height="4.75" rx="1.3"/><rect x="9" y="9" width="4.75" height="4.75" rx="1.3" stroke-dasharray="1.6 1.4"/>',
+  download: '<path d="M8 2.25v7.5M4.9 6.9L8 10l3.1-3.1M2.75 13.5h10.5"/>',
+  pick: '<path d="M1.75 4.5c0-.55.45-1 1-1h3.4l1.35 1.4h5.75c.55 0 1 .45 1 1v6.35c0 .55-.45 1-1 1H2.75c-.55 0-1-.45-1-1z"/><path d="M8 7.25v3.5M6.25 9h3.5"/>',
+  up: '<path d="M8 13V3.5M4.25 7.25L8 3.5l3.75 3.75"/>',
+  refresh: '<path d="M13.25 8a5.25 5.25 0 1 1-1.55-3.7"/><path d="M11.9 1.9v2.6H9.3"/>',
+  reveal: '<path d="M9.5 2.5h4v4M13.5 2.5L8 8"/><path d="M11.5 9.5v3.25c0 .4-.35.75-.75.75h-7.5a.75.75 0 0 1-.75-.75v-7.5c0-.4.35-.75.75-.75H6.5"/>',
+  eye: '<path d="M1.75 8S4 3.75 8 3.75 14.25 8 14.25 8 12 12.25 8 12.25 1.75 8 1.75 8z"/><circle cx="8" cy="8" r="1.9"/>',
+  chevron: '<path d="M6.25 3.75L10.5 8l-4.25 4.25"/>',
+  chat: '<path d="M2.25 3.75c0-.55.45-1 1-1h9.5c.55 0 1 .45 1 1v6.5c0 .55-.45 1-1 1H7l-3 2.25v-2.25h-.75c-.55 0-1-.45-1-1z"/>',
+  gear: '<circle cx="8" cy="8" r="2"/><path d="M8 1.75v1.6M8 12.65v1.6M14.25 8h-1.6M3.35 8h-1.6M12.4 3.6l-1.15 1.15M4.75 11.25L3.6 12.4M12.4 12.4l-1.15-1.15M4.75 4.75L3.6 3.6"/>',
+  reset: '<path d="M2.75 8a5.25 5.25 0 1 0 1.55-3.7"/><path d="M4.1 1.9v2.6h2.6"/>',
+  close: '<path d="M4 4l8 8M12 4l-8 8"/>',
+  sparkle: '<path d="M8 1.75l1.4 4.85L14.25 8 9.4 9.4 8 14.25 6.6 9.4 1.75 8 6.6 6.6z"/>',
+  trash: '<path d="M2.75 4.25h10.5M6.25 4.25V2.75h3.5v1.5M4 4.25l.65 9.25h6.7L12 4.25"/>',
+  search: '<circle cx="7" cy="7" r="4.25"/><path d="M10.25 10.25l3.5 3.5"/>',
+};
+const svg = k => `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[k] || SVG.file}</svg>`;
+function iconKey(r) {
+  if (r.dir) return r.err ? 'lock' : r.skip ? 'disk' : r.pkg ? 'pkg' : 'dir';
+  return r.link ? 'link' : 'file';
 }
+const iconCls = r => ({ dir: 'dir', lock: 'lock', disk: 'file', pkg: 'pkg', link: 'file', file: 'file' })[iconKey(r)];
+const icon = r => svg(iconKey(r));
 
 // ---------- État ----------
 const S = {
@@ -82,7 +113,7 @@ function renderHeader() {
   const d = S.data, n = d.node;
   $('#crumbs').innerHTML = d.crumbs.map((c, i) =>
     `<a data-id="${c.id}" title="${esc(i ? c.name : c.name)}">${esc(i ? c.name : pretty(c.name))}</a>`).join('<span class="sep">›</span>');
-  $('#curName').textContent = d.crumbs.length > 1 ? n.name : (pretty(n.name).split('/').filter(Boolean).pop() || '/');
+  $('#curName').textContent = d.crumbs.length > 1 ? n.name : d.path === HOME ? 'Dossier perso' : (pretty(n.name).split(SEP).filter(Boolean).pop() || n.name);
   $('#curName').title = d.path;
   let meta = `${fmtSize(n.size)} · ${nf.format(n.count)} fichiers`;
   if (S.root && S.cur === S.root.id && S.status?.volume && S.root.path === '/') {
@@ -90,10 +121,10 @@ function renderHeader() {
     meta += ` · <span title="Différence entre l’espace utilisé et ce qui est visible : système, snapshots APFS (Time Machine), espace purgeable, fichiers d’autres utilisateurs non lisibles.">volume utilisé : ${fmtSize(used)} ⓘ</span>`;
   }
   const errs = S.status?.scan?.errors;
-  if (errs) meta += ` · <span class="tag" title="Ces dossiers n’ont pas pu être lus. Donne l’Accès complet au disque à ton Terminal (Réglages Système → Confidentialité et sécurité → Accès complet au disque), puis relance.">⚠ ${nf.format(errs)} dossiers inaccessibles</span>`;
+  if (errs) meta += ` · <span class="tag" title="Ces dossiers n’ont pas pu être lus (droits d’accès). ${esc(HINT.replace(/<[^>]+>/g, ''))}">⚠ ${nf.format(errs)} dossiers inaccessibles</span>`;
   $('#curMeta').innerHTML = meta;
   $('#upBtn').disabled = d.crumbs.length < 2;
-  $('#chatCtx').textContent = '📁 ' + pretty(d.path);
+  $('#chatCtx').textContent = pretty(d.path);
   $('#chatCtx').title = 'L’assistant voit ce dossier : ' + d.path;
 }
 
@@ -101,7 +132,7 @@ const COLS = [['', ''], ['name', 'Nom'], ['size', 'Taille'], ['pct', '%'], ['cou
 function renderThead() {
   $('#thead').innerHTML = COLS.map(([k, l], i) => {
     if (!k) return '<span></span>';
-    const arrow = S.sort.k === k || (k === 'pct' && S.sort.k === 'size') ? (S.sort.d < 0 ? ' ↓' : ' ↑') : '';
+    const arrow = S.sort.k === k ? (S.sort.d < 0 ? ' ↓' : ' ↑') : '';
     return `<span data-k="${k === 'pct' ? 'size' : k}" class="${i >= 2 ? 'r' : ''} col-${k}">${l}${arrow}</span>`;
   }).join('');
 }
@@ -139,15 +170,16 @@ function renderList(opts = {}) {
     const barW = S.tab === 'content' ? pct(r.size, parent) : pct(r.size, max);
     html += `<div class="row${r.dir ? ' dir' : ''}${sel ? ' sel' : ''}${tall ? ' tall' : ''}" data-i="${i}"${r.tip ? ` title="${esc(r.tip)}"` : ''}>
       <span><input type="checkbox"${sel ? ' checked' : ''}></span>
-      <span class="nm"><span class="ic">${icon(r)}</span><span class="t">${esc(r.name)}${sub ? `<small>${sub}</small>` : ''}</span>${tags}
-        <span class="ra"><button data-a="ql" title="Aperçu (Espace)">👁</button><button data-a="reveal" title="Afficher dans le Finder">Finder</button>${r.dir && !r.skip ? '<button data-a="go" title="Ouvrir (→)">Ouvrir</button>' : ''}</span></span>
+      <span class="nm"><span class="ic ${iconCls(r)}">${icon(r)}</span><span class="t">${esc(r.name)}${sub ? `<small>${sub}</small>` : ''}</span>${tags}
+        <span class="ra"><button data-a="ql" title="Aperçu (Espace)">${svg('eye')}</button><button data-a="reveal" title="Afficher dans le ${FM}">${svg('reveal')}</button>${r.dir && !r.skip ? `<button data-a="go" title="Ouvrir (→)">${svg('chevron')}</button>` : ''}</span></span>
       <span class="sz"><span class="bar"><i style="width:${Math.max(barW, 0.3).toFixed(2)}%"></i></span><b>${fmtSize(r.size)}</b></span>
       <span class="pc r col-pc">${fmtPct(pct(r.size, parent))}</span>
       <span class="ct r col-ct">${r.dir ? nf.format(r.count) : ''}</span>
       <span class="mt r col-mt" title="${r.mtime ? new Date(r.mtime * 1000).toLocaleString('fr-FR') : ''}">${relTime(r.mtime)}</span>
     </div>`;
   });
-  if (!S.view.length) html = `<div class="empty">${S.filter ? 'Aucun résultat pour ce filtre' : S.tab === 'hogs' ? 'Rien de connu à nettoyer ici 🎉' : 'Dossier vide'}</div>`;
+  if (!S.view.length) html = `<div class="empty">${S.filter ? 'Aucun résultat pour ce filtre' : S.tab === 'hogs' ? 'Rien de connu à nettoyer ici'
+    : S.data.node.err ? `Accès refusé à ce dossier.<br><span class="small">${HINT || 'Vérifie les autorisations du système.'}</span>` : 'Dossier vide'}</div>`;
   if (S.rest && !S.filter) html += `<div class="rest">+ ${nf.format(S.rest.n)} autres éléments plus petits · ${fmtSize(S.rest.size)}</div>`;
   $('#list').innerHTML = html;
   $('#listInfo').textContent = `${nf.format(S.view.length)} élément${S.view.length > 1 ? 's' : ''}` + (S.tab === 'big' ? ' — les plus gros fichiers de ce dossier et sous-dossiers' : S.tab === 'hogs' ? ' — caches & dossiers régénérables connus' : '');
@@ -210,6 +242,9 @@ function setTab(tab) {
 }
 
 // ---------- Treemap ----------
+// Palette : oranges et noirs/gris en alternance (TM_LIGHT = fond clair → texte noir)
+const TM_COLORS = ['#FF5F00', '#1A1A1A', '#FF8B3D', '#3D3D3B', '#C24800', '#5C5C59', '#FFB27A', '#262625', '#8F3600', '#7A7A76'];
+const TM_LIGHT = [true, false, true, false, false, false, true, false, false, false];
 function squarify(items, x, y, w, h) {
   const out = [];
   const total = items.reduce((a, b) => a + b.size, 0);
@@ -259,17 +294,18 @@ function drawTreemap() {
     const r = c.it;
     S.tmIndex.set(r.id, { ...r, parent: S.cur });
     if (c.w < 2 || c.h < 2) return;
-    const hue = (i * 47 + 220) % 360;
+    const base = TM_COLORS[i % TM_COLORS.length], light = TM_LIGHT[i % TM_COLORS.length];
+    const bg = r.dir ? base : `color-mix(in srgb, ${base} 55%, #8a8a86)`;
     const lbl = c.w > 46 && c.h > 18;
-    html += `<div class="cell" data-id="${r.id}" style="left:${px(c.x)};top:${px(c.y)};width:${px(c.w)};height:${px(c.h)};background:hsl(${hue} ${r.dir ? 45 : 15}% ${r.dir ? 30 : 32}%)">`;
+    html += `<div class="cell" data-id="${r.id}" style="left:${px(c.x)};top:${px(c.y)};width:${px(c.w)};height:${px(c.h)};background:${bg};--ink:${light ? 'rgba(11,11,11,.88)' : 'rgba(255,255,255,.92)'}">`;
     if (lbl) html += `<div class="lbl">${esc(r.name)}<small>${fmtSize(r.size)}</small></div>`;
     if (r.children && c.w > 24 && c.h > 30) {
       const pad = 3, top = lbl ? 18 : pad;
       squarify(r.children, pad, top, c.w - pad * 2 - 2, c.h - top - pad - 2).forEach((s, j) => {
         S.tmIndex.set(s.it.id, { ...s.it, parent: r.id });
         if (s.w < 3 || s.h < 3) return;
-        const l = 38 + ((j * 7) % 20);
-        html += `<div class="sub" data-id="${s.it.id}" style="left:${px(s.x)};top:${px(s.y)};width:${px(s.w)};height:${px(s.h)};background:hsl(${hue} ${s.it.dir ? 50 : 28}% ${l}%)">${s.w > 44 && s.h > 14 ? `<div class="lbl">${esc(s.it.name)}</div>` : ''}</div>`;
+        const k = 62 + ((j * 9) % 30);
+        html += `<div class="sub" data-id="${s.it.id}" style="left:${px(s.x)};top:${px(s.y)};width:${px(s.w)};height:${px(s.h)};background:color-mix(in srgb, ${base} ${s.it.dir ? k : k - 25}%, ${light ? '#ffffff' : '#000000'})">${s.w > 44 && s.h > 14 ? `<div class="lbl">${esc(s.it.name)}</div>` : ''}</div>`;
       });
     }
     html += '</div>';
@@ -285,17 +321,17 @@ function highlightTm(id) {
 }
 
 // ---------- Types ----------
-const CAT_STYLE = { video: ['🎬', '#ff6b8b'], image: ['🖼️', '#ffb547'], audio: ['🎵', '#b07cff'], archive: ['💿', '#5bc0ff'], doc: ['📕', '#46d39a'],
-  code: ['⚙️', '#7c9cff'], data: ['🗄️', '#ff8f5b'], app: ['🧩', '#e86bff'], dev: ['🛠️', '#9aa3b5'], other: ['📄', '#5d6475'] };
+const CAT_STYLE = { video: ['', '#FF5F00'], image: ['', '#FF8B3D'], audio: ['', '#C24800'], archive: ['', '#FFB27A'], doc: ['', '#8F3600'],
+  code: ['', '#3D3D3B'], data: ['', '#7A7A76'], app: ['', '#1A1A1A'], dev: ['', '#5C5C59'], other: ['', '#B5B5B0'] };
 function renderTypes(t) {
   const total = S.data.node.size || 1;
   const maxC = t.categories[0]?.size || 1, maxE = t.extensions[0]?.size || 1;
   const cat = t.categories.map(c => {
     const [e, col] = CAT_STYLE[c.key] || ['📄', '#888'];
-    return `<div class="trow"><span>${e}</span><span>${esc(c.label)}</span><span class="bar"><i style="width:${pct(c.size, maxC)}%;background:${col}"></i></span><b>${fmtSize(c.size)}</b><span class="muted small r">${fmtPct(pct(c.size, total))}</span></div>`;
+    return `<div class="trow"><span class="tdot" style="background:${col}"></span><span>${esc(c.label)}</span><span class="bar"><i style="width:${pct(c.size, maxC)}%;background:${col}"></i></span><b>${fmtSize(c.size)}</b><span class="muted small r">${fmtPct(pct(c.size, total))}</span></div>`;
   }).join('');
   const ext = t.extensions.map(x =>
-    `<div class="trow" style="cursor:pointer" data-ext="${esc(x.ext)}" title="Voir les plus gros fichiers .${esc(x.ext)}"><span>${EMOJI[x.ext] || '📄'}</span><span>${x.ext.startsWith('(') ? esc(x.ext) : '.' + esc(x.ext)}</span><span class="bar"><i style="width:${pct(x.size, maxE)}%;background:var(--accent)"></i></span><b>${fmtSize(x.size)}</b><span class="muted small">${nf.format(x.count)} fich.</span></div>`).join('');
+    `<div class="trow" style="cursor:pointer" data-ext="${esc(x.ext)}" title="Voir les plus gros fichiers .${esc(x.ext)}"><span class="ic file">${svg('file')}</span><span>${x.ext.startsWith('(') ? esc(x.ext) : '.' + esc(x.ext)}</span><span class="bar"><i style="width:${pct(x.size, maxE)}%;background:var(--orange)"></i></span><b>${fmtSize(x.size)}</b><span class="muted small">${nf.format(x.count)} fich.</span></div>`).join('');
   $('#typesView').innerHTML = `<div><h3>Par catégorie</h3>${cat || '<p class="muted">Vide</p>'}
     <p class="muted small">« Applications » = contenu des .app · « Dépendances & builds dev » = node_modules, .git, .next, venv, DerivedData…</p></div>
     <div><h3>Par extension <span class="muted small">(hors apps & dépendances — clique pour voir les fichiers)</span></h3>${ext}</div>`;
@@ -315,13 +351,13 @@ function sugItem(it, { extra = '', noSel = false } = {}) {
   const sel = S.sel.has(it.id);
   return `<div class="sitem${sel ? ' sel' : ''}" data-id="${it.id}">
     <input type="checkbox"${sel ? ' checked' : ''}${noSel ? ' disabled title="Pas de mise à la corbeille directe pour celui-ci"' : ''}>
-    <span class="ic">${icon(it)}</span>
+    <span class="ic ${iconCls(it)}">${icon(it)}</span>
     <div class="sbody">
       <div class="sname">${esc(it.title || it.name)}</div>
       <div class="spath" title="${esc(it.path)}">${esc(pretty(it.path))}${it.note ? ` <span class="muted">· ${esc(it.note)}</span>` : ''}</div>
       ${extra}
     </div>
-    <span class="sacts"><button data-a="reveal" title="Afficher dans le Finder">Finder</button>${it.dir ? '<button data-a="go" title="Ouvrir dans Taupe">Voir</button>' : ''}</span>
+    <span class="sacts"><button data-a="reveal" title="Afficher dans le ${FM}">${svg('reveal')}</button>${it.dir ? `<button data-a="go" title="Ouvrir dans Taupe">${svg('chevron')}</button>` : ''}</span>
     <b class="ssize">${fmtSize(it.size)}</b>
   </div>`;
 }
@@ -340,24 +376,22 @@ function renderRules(groups) {
     </div>`;
   }).join('');
   $('#ruleGroups').innerHTML = `<h2 class="stitle">Repéré automatiquement <span class="muted">· ≈ ${fmtSize(total)}</span></h2>` +
-    (html || '<p class="muted">Rien de suspect selon les règles automatiques 🎉 Essaie l’analyse IA.</p>');
+    (html || '<p class="muted">Rien de suspect selon les règles automatiques. Essaie l’analyse IA.</p>');
 }
 
 function renderAI(st) {
   AI = st;
-  const j = st.job, prov = st.providers, labels = st.labels;
-  let pick = lsGet('taupe.ai') || 'claude';
-  if (!prov[pick]) pick = Object.keys(prov).find(k => prov[k]) || pick;
+  const j = st.job, labels = st.labels;
+  PROVS = st.providers;
   const running = j.status === 'running';
-  const opts = Object.entries(labels).map(([k, l]) => `<option value="${k}"${k === pick ? ' selected' : ''}${prov[k] ? '' : ' disabled'}>${esc(l)}${prov[k] ? '' : ' — non installé'}</option>`).join('');
+  const opts = providerOptions();
   let body = '';
   if (running) {
     body = `<div class="aistate"><span class="spin"></span> ${esc(labels[j.provider] || j.provider)} analyse <b>${esc(pretty(j.target))}</b>… ${Math.round(j.elapsed / 1000)} s <span class="muted">(compte 1 à 2 min)</span></div>`;
   } else if (j.status === 'error') {
     const auth = /authenticat|login|logged|expired|401|unauthorized/i.test(j.error);
-    const fix = j.provider === 'codex' ? 'codex login' : 'claude';
     body = `<div class="aierr"><b>L’analyse a échoué.</b> <span class="muted small">${esc(j.error.slice(0, 400))}</span>
-      ${auth ? `<p>👉 Ta CLI n’est pas connectée à ton compte. Ouvre un Terminal, tape <code>${fix}</code>${j.provider === 'claude' ? ' puis <code>/login</code>' : ''}, connecte-toi, puis relance.</p>` : ''}</div>`;
+      ${auth ? `<p>Ton compte ${esc(AI_LABEL[j.provider])} n’est pas connecté.</p>${connectBlock(j.provider)}` : ''}</div>`;
   } else if (j.status === 'done') {
     const items = j.result.items;
     const safe = items.filter(x => x.risk === 'safe' && x.action === 'trash');
@@ -370,11 +404,13 @@ function renderAI(st) {
           (it.command ? `<div class="scmd"><code>${esc(it.command)}</code><button class="btn ghost sm" data-copy="${esc(it.command)}">Copier</button></div>` : ''),
       })).join('') || '<p class="muted">Aucune suggestion exploitable.</p>'}</div>`;
   } else {
-    body = `<p class="muted small">L’IA voit les noms, tailles et dates des éléments les plus lourds — <b>jamais le contenu de tes fichiers</b> — et propose quoi supprimer, avec le niveau de risque. Rien n’est supprimé sans toi.</p>`;
+    body = !anyReady() ? `<p class="muted small">Connecte ton abonnement Claude ou ChatGPT pour obtenir une liste triée de ce que tu peux supprimer, avec le niveau de risque. L’IA ne voit que les noms, tailles et dates — jamais le contenu de tes fichiers.</p>${connectBlock()}` : `<p class="muted small">L’IA voit les noms, tailles et dates des éléments les plus lourds — <b>jamais le contenu de tes fichiers</b> — et propose quoi supprimer, avec le niveau de risque. Rien n’est supprimé sans toi.</p>`;
   }
-  $('#aiPanel').innerHTML = `<div class="aihead"><h2 class="stitle">✨ Analyse IA</h2><span class="grow"></span>
-      <select id="aiProv"${running ? ' disabled' : ''}>${opts}</select>
-      <button class="btn primary sm" id="aiStart"${running || !Object.values(prov).some(Boolean) ? ' disabled' : ''}>${j.status === 'done' ? 'Relancer' : 'Analyser ce dossier'}</button></div>${body}`;
+  $('#aiPanel').innerHTML = `<div class="aihead"><h2 class="stitle">Analyse IA</h2><span class="grow"></span>
+      ${anyReady() ? `<select id="aiProv"${running ? ' disabled' : ''}>${opts}</select>
+      <button class="btn ghost sm" data-accounts>Comptes</button>
+      <button class="btn primary sm" id="aiStart"${running ? ' disabled' : ''}>${j.status === 'done' ? 'Relancer' : 'Analyser ce dossier'}</button>`
+      : ''}</div>${body}`;
   clearTimeout(aiTimer);
   if (running && S.tab === 'suggest') aiTimer = setTimeout(refreshAI, 1500);
 }
@@ -385,7 +421,7 @@ async function refreshAI() {
     const st = await get('/api/ai');
     if (S.tab !== 'suggest') return;
     renderAI(st);
-    if (prev === 'running' && st.job.status === 'done') toast(`✨ Analyse IA terminée : ${st.job.result.items.length} suggestions`, 'ok');
+    if (prev === 'running' && st.job.status === 'done') toast(`Analyse IA terminée : ${st.job.result.items.length} suggestions`, 'ok');
   } catch (e) { toast(esc(e.message), 'err'); }
 }
 
@@ -411,6 +447,7 @@ function selItems() {
 function updateSelBar() {
   const items = selItems();
   $('#selbar').hidden = !items.length;
+  document.body.classList.toggle('has-sel', items.length > 0);
   const total = items.reduce((a, b) => a + b.size, 0);
   $('#selText').innerHTML = `<b>${items.length}</b> élément${items.length > 1 ? 's' : ''} sélectionné${items.length > 1 ? 's' : ''} · <b>${fmtSize(total)}</b>`;
 }
@@ -466,7 +503,7 @@ const saveChat = () => lsSet('taupe.chat', JSON.stringify(CHAT.slice(-40)));
 // Mini-markdown : blocs de code, `code` (→ liens cliquables si chemin connu), **gras**, listes, titres
 function mdLite(text, links = []) {
   const L = new Map(links.map(l => [l.text, l]));
-  const link = (raw, l) => `<a class="plink" data-id="${l.id}" data-parent="${l.parent}" data-dir="${l.dir ? 1 : 0}" title="Ouvrir dans Taupe · ${fmtSize(l.size)}">${l.dir ? '📁' : '📄'} ${esc(pretty(raw))}</a>`;
+  const link = (raw, l) => `<a class="plink" data-id="${l.id}" data-parent="${l.parent}" data-dir="${l.dir ? 1 : 0}" title="Ouvrir dans Taupe · ${fmtSize(l.size)}">${esc(pretty(raw))}</a>`;
   const inline = s => s.split(/`([^`\n]+)`/).map((p, i) => {
     if (i % 2) return L.has(p) ? link(p, L.get(p)) : `<code>${esc(p)}</code>`;
     let h = esc(p);
@@ -482,14 +519,18 @@ function mdLite(text, links = []) {
 function renderChat() {
   const box = $('#chatMsgs');
   if (!CHAT.length && !chatBusy) {
-    box.innerHTML = `<div class="chatempty"><p>Pose-moi des questions sur le dossier affiché : je vois les noms, tailles et dates (pas le contenu de tes fichiers).</p>
-      ${CHAT_IDEAS.map(q => `<button class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
+    box.innerHTML = PROVS && !Object.values(PROVS).some(ready)
+      ? `<div class="onboard"><b>Connecte ton IA</b>
+          <p>Pose des questions sur tes dossiers avec ton abonnement Claude ou ChatGPT. Pas de clé API, pas de frais en plus.</p>
+          ${connectBlock()}</div>`
+      : `<div class="chatempty"><p>Pose-moi des questions sur le dossier affiché : je vois les noms, tailles et dates (pas le contenu de tes fichiers).</p>
+          ${CHAT_IDEAS.map(q => `<button class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
     return;
   }
   box.innerHTML = CHAT.map(m => m.role === 'user'
     ? `<div class="msg user">${esc(m.content).replace(/\n/g, '<br>')}</div>`
     : `<div class="msg bot${m.error ? ' err' : ''}">${m.error ? esc(m.content) : mdLite(m.content, m.links)}
-        <div class="msgmeta">${esc(AI_LABEL[m.provider] || m.provider || '')}${m.ms ? ` · ${Math.round(m.ms / 1000)} s` : ''}${m.ctx ? ` · 📁 ${esc(pretty(m.ctx))}` : ''}</div></div>`).join('') +
+        <div class="msgmeta">${esc(AI_LABEL[m.provider] || m.provider || '')}${m.ms ? ` · ${Math.round(m.ms / 1000)} s` : ''}${m.ctx ? ` · ${esc(pretty(m.ctx))}` : ''}</div></div>`).join('') +
     (chatBusy ? `<div class="msg bot pending"><span class="spin"></span> <span id="chatWait">Réflexion…</span></div>` : '');
   box.scrollTop = box.scrollHeight;
 }
@@ -513,7 +554,7 @@ async function sendChat(text) {
   } catch (e) {
     const auth = /authenticat|login|logged|expired|401|unauthorized/i.test(e.message);
     CHAT.push({ role: 'assistant', error: true, provider, content: e.message.slice(0, 400) +
-      (auth ? `\n\n👉 Ta CLI n’est pas connectée : dans un Terminal, tape « ${provider === 'codex' ? 'codex login' : 'claude » puis « /login'} ». Ou choisis l’autre modèle en bas.` : '') });
+      (auth ? `\n\nTon compte n’est pas connecté : clique sur « Comptes » en haut de l’assistant.` : '') });
   }
   clearInterval(chatTimer);
   chatBusy = false; $('#chatSend').disabled = false;
@@ -527,16 +568,108 @@ function openLink(a) {
   if (a.dataset.dir === '1') navigate(id); else navigate(parent, id);
 }
 
-async function initChat() {
-  renderChat();
-  try {
-    const st = await get('/api/ai');
-    let pick = lsGet('taupe.ai') || 'claude';
-    if (!st.providers[pick]) pick = Object.keys(st.providers).find(k => st.providers[k]) || pick;
-    $('#chatProv').innerHTML = Object.entries(st.labels).map(([k, l]) =>
-      `<option value="${k}"${k === pick ? ' selected' : ''}${st.providers[k] ? '' : ' disabled'}>${esc(AI_LABEL[k])}${st.providers[k] ? '' : ' (non installé)'}</option>`).join('');
-  } catch {}
+// ---------- Comptes IA (Claude / ChatGPT) : connexion en un clic ----------
+let PROVS = null, LOGIN = null, loginTimer = null, lastSig = '';
+const NAME = { claude: 'Claude', codex: 'ChatGPT' };
+const ready = p => !!(p && p.installed && p.loggedIn);
+const anyReady = () => !!PROVS && Object.values(PROVS).some(ready);
+function providerOptions() {
+  if (!PROVS) return '';
+  let pick = lsGet('taupe.ai') || 'claude';
+  if (!ready(PROVS[pick])) pick = Object.keys(PROVS).find(k => ready(PROVS[k])) || pick;
+  return Object.keys(PROVS).filter(k => ready(PROVS[k])).map(k =>
+    `<option value="${k}"${k === pick ? ' selected' : ''}>${esc(AI_LABEL[k])}</option>`).join('');
 }
+
+// Bloc de connexion réutilisé (assistant, suggestions, fenêtre Comptes)
+function connectBlock(only) {
+  const L = LOGIN?.status === 'running' ? LOGIN : null;
+  if (L && (!only || only === L.provider)) {
+    if (L.phase !== 'login') return `<div class="cx"><p class="cx-wait"><span class="spin"></span><span>Installation de l’outil ${NAME[L.provider]} officiel… <span class="muted">environ 1 min</span></span></p>
+      <button class="linkbtn" data-cancel-login>Annuler</button></div>`;
+    return `<div class="cx"><p class="cx-wait"><span class="spin"></span><span>Connecte-toi dans la page ${NAME[L.provider]} qui vient de s’ouvrir.</span></p>
+      ${L.needsCode ? `<p class="muted small">Copie le code affiché à la fin : il est validé automatiquement dès que tu reviens ici.</p>
+        <div class="cx-code"><input id="loginCode" placeholder="ou colle le code ici" autocomplete="off" spellcheck="false"><button class="btn sm" data-code-submit>Valider</button></div>` : ''}
+      <p class="small">${L.url ? `<button class="linkbtn" data-ext="${esc(L.url)}">Rouvrir la page</button> · ` : ''}<button class="linkbtn" data-cancel-login>Annuler</button></p></div>`;
+  }
+  const failed = LOGIN && ['error'].includes(LOGIN.status) && (!only || only === LOGIN.provider)
+    ? `<p class="small cx-err">La connexion à ${NAME[LOGIN.provider]} a échoué. ${esc(stripLast(LOGIN.output))}</p>` : '';
+  const ks = (only ? [only] : ['claude', 'codex']).filter(k => !ready(PROVS?.[k]));
+  return `<div class="cx">${failed}<div class="cx-btns">${ks.map((k, i) =>
+    `<button class="btn ${i === 0 ? 'primary' : ''} sm" data-connect="${k}">Continuer avec ${NAME[k]}</button>`).join('')}</div></div>`;
+}
+const stripLast = t => (t || '').split('\n').map(x => x.trim()).filter(Boolean).pop() || '';
+
+async function loadProviders(refresh) {
+  try {
+    const st = await get('/api/ai' + (refresh ? '?refresh=1' : ''));
+    const wasRunning = LOGIN?.status === 'running';
+    const sig = JSON.stringify([st.providers, st.login && { ...st.login, output: '' }]);
+    const changed = sig !== lastSig; lastSig = sig;
+    PROVS = st.providers; LOGIN = st.login;
+    if (wasRunning && LOGIN?.status === 'done') { toast(`Compte ${esc(NAME[LOGIN.provider])} connecté`, 'ok'); return loadProviders(true); }
+    const any = anyReady();
+    $('#chatProv').innerHTML = providerOptions();
+    $('#chatInput').disabled = !any; $('#chatSend').disabled = !any || chatBusy; $('#chatProv').hidden = !any;
+    $('#chatInput').placeholder = any ? 'Pose une question sur ce dossier… (Entrée pour envoyer)' : 'Connecte un compte IA pour discuter';
+    const typing = document.activeElement?.id === 'loginCode';
+    if (changed && !typing) {
+      if (!chatBusy) renderChat();
+      if (!$('#aiModal').hidden) renderAccounts();
+      if (S.tab === 'suggest' && AI) renderAI({ ...AI, providers: PROVS });
+    }
+    clearTimeout(loginTimer);
+    if (LOGIN?.status === 'running') loginTimer = setTimeout(loadProviders, 1500);
+    return st;
+  } catch { return null; }
+}
+async function initChat() { renderChat(); await loadProviders(); }
+
+function renderAccounts() {
+  if (document.activeElement?.id === 'loginCode') return;
+  $('#aiAccounts').innerHTML = Object.keys(PROVS || {}).map(k => {
+    const p = PROVS[k];
+    const state = !p.installed ? 'Non installé' : p.loggedIn ? 'Connecté' : 'Non connecté';
+    const body = ready(p)
+      ? `<p class="small muted">${esc(p.detail || 'Prêt')}</p><button class="linkbtn" data-logout="${k}">Se déconnecter</button>`
+      : connectBlock(k);
+    return `<div class="acct"><div class="accthead"><b>${NAME[k]}</b><span class="muted small">${state}</span></div>${body}</div>`;
+  }).join('');
+}
+async function openAccounts() { $('#aiModal').hidden = false; renderAccounts(); lastSig = ''; await loadProviders(true); }
+function closeAccounts() { $('#aiModal').hidden = true; }
+
+async function submitCode(code) {
+  code = (code || '').trim();
+  if (!code) return;
+  try { await post('/api/ai/login/code', { code }); toast('Code envoyé, connexion en cours…', '', 2500); loadProviders(); } catch (e) { toast(esc(e.message), 'err'); }
+}
+// Claude affiche un code à recopier : dès qu'on revient dans Taupe, on le lit dans le presse-papiers.
+let lastClip = '';
+window.addEventListener('focus', async () => {
+  if (LOGIN?.status !== 'running' || LOGIN.phase !== 'login' || !LOGIN.needsCode) return;
+  try {
+    const t = (await navigator.clipboard.readText()).trim();
+    if (t && t !== lastClip && /^[\w\-.~]{20,}(#[\w\-.~]+)?$/.test(t) && t.length < 500) { lastClip = t; submitCode(t); }
+  } catch {}
+});
+
+document.addEventListener('click', async e => {
+  const t = e.target.closest('[data-connect],[data-cancel-login],[data-code-submit],[data-logout],[data-ext],[data-accounts],#aiModalClose');
+  if (!t && e.target.id === 'aiModal') return closeAccounts();
+  if (!t) return;
+  e.preventDefault();
+  try {
+    if (t.id === 'aiModalClose') return closeAccounts();
+    if (t.dataset.accounts !== undefined) return openAccounts();
+    if (t.dataset.connect) { lastClip = ''; await post('/api/ai/connect', { provider: t.dataset.connect }); return loadProviders(); }
+    if (t.dataset.cancelLogin !== undefined) { await post('/api/ai/login/cancel'); return loadProviders(true); }
+    if (t.dataset.codeSubmit !== undefined) return submitCode($('#loginCode')?.value);
+    if (t.dataset.logout) { await post('/api/ai/logout', { provider: t.dataset.logout }); return loadProviders(true); }
+    if (t.dataset.ext) return post('/api/external', { url: t.dataset.ext });
+  } catch (err) { toast(esc(err.message), 'err'); }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'loginCode') submitCode(e.target.value); });
 
 $('#chatForm').addEventListener('submit', e => { e.preventDefault(); sendChat($('#chatInput').value); });
 $('#chatInput').addEventListener('keydown', e => {
@@ -594,7 +727,28 @@ async function poll(once) {
 
 // ---------- Événements ----------
 $('#scanForm').addEventListener('submit', e => { e.preventDefault(); startScan($('#pathInput').value || '~'); });
-for (const c of document.querySelectorAll('.card')) c.addEventListener('click', () => startScan(c.dataset.path));
+$('#cards').addEventListener('click', e => { const c = e.target.closest('.card'); if (!c) return; c.dataset.pick ? pickFolder() : startScan(c.dataset.path); });
+$('#pickBtn').addEventListener('click', () => pickFolder());
+async function pickFolder() {
+  if (!IS_APP) return $('#pathInput').focus();
+  try { const r = await post('/api/pick'); if (r.path) { $('#pathInput').value = pretty(r.path); startScan(r.path); } } catch (e) { toast(esc(e.message), 'err'); }
+}
+const HINT = IS_MAC ? `Pour tout voir (Mail, Messages, Photos…), donne l’<b>Accès complet au disque</b> à ${IS_APP ? 'Taupe' : 'ton Terminal'} : Réglages Système → Confidentialité et sécurité → Accès complet au disque.`
+  : IS_WIN ? 'Certains dossiers système demandent les droits administrateur : clic droit sur Taupe → <b>Exécuter en tant qu’administrateur</b> pour tout voir.' : '';
+function renderWelcome(st) {
+  const cards = (st.places || []).map(p => `<button class="card" data-path="${esc(p.path)}"><b>${esc(p.label)}</b><small>${esc(p.hint)}</small></button>`);
+  if (IS_APP) cards.push('<button class="card" data-pick="1"><b>Choisir un dossier…</b><small>' + MOD + 'O</small></button>');
+  $('#cards').innerHTML = cards.join('');
+  $('#hint').innerHTML = HINT;
+}
+function applyPlatformLabels() {
+  for (const el of document.querySelectorAll('[data-icon]')) el.insertAdjacentHTML('afterbegin', svg(el.dataset.icon));
+  $('#finderBtn').textContent = FM; $('#finderBtn').title = `Ouvrir dans le ${FM}`;
+  $('#trashBtn').innerHTML = `Mettre à la corbeille <kbd>${TRASH_KEY}</kbd>`;
+  $('.keyhint').textContent = `↑↓ naviguer · → ouvrir · ← remonter · Espace aperçu · ${IS_MAC ? '⌘' : 'Ctrl'}/⇧clic sélection · ${TRASH_KEY} corbeille`;
+  $('#pickBtn').hidden = !IS_APP;
+}
+window.taupe = { pick: pickFolder, rescan: () => !$('#app').hidden && $('#rescanBtn').click(), toggleChat: () => $('#chatToggle').click() };
 $('#logo').addEventListener('click', e => { e.preventDefault(); if (S.root) { show('app'); navigate(S.root.id); } else show('welcome'); });
 $('#cancelBtn').addEventListener('click', () => post('/api/cancel'));
 $('#upBtn').addEventListener('click', goUp);
@@ -690,6 +844,7 @@ $('#mOk').addEventListener('click', doTrash);
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
 
 document.addEventListener('keydown', e => {
+  if (!$('#aiModal').hidden) { if (e.key === 'Escape') closeAccounts(); return; }
   if (!$('#modal').hidden) {
     if (e.key === 'Escape') closeModal();
     else if (e.key === 'Enter') { e.preventDefault(); doTrash(); }
@@ -713,8 +868,10 @@ document.addEventListener('keydown', e => {
 
 // ---------- Démarrage ----------
 (async () => {
+  applyPlatformLabels();
   initChat();
   await poll(true);
+  if (S.status) renderWelcome(S.status);
   if (S.root) { show('app'); $('#pathInput').value = pretty(S.root.path); await navigate(S.root.id); }
   else show('welcome');
   if (!S.wasScanning) poll();
