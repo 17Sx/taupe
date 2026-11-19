@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { execFile, spawn } from 'node:child_process';
+import { tr } from './i18n.mjs';
 
 export const PLATFORM = process.platform; // 'darwin' | 'win32' | 'linux'
 export const IS_MAC = PLATFORM === 'darwin';
@@ -48,21 +49,22 @@ export function expand(p) {
 }
 
 // Raccourcis proposés sur l'écran d'accueil
-export function places() {
+export function places(lang = 'en') {
+  const T = (s, v) => tr(lang, s, v);
   if (IS_WIN) {
     const drives = [];
     for (const l of 'CDEFGH') { try { fs.accessSync(`${l}:\\`); drives.push(`${l}:\\`); } catch {} }
     return [
-      { path: HOME, icon: 'home', label: 'Dossier perso', hint: HOME },
-      ...drives.map(d => ({ path: d, icon: 'disk', label: `Disque ${d.slice(0, 2)}`, hint: 'tout le disque' })),
-      { path: H('Downloads'), icon: 'download', label: 'Téléchargements', hint: 'Downloads' },
+      { path: HOME, icon: 'home', label: T('Dossier perso'), hint: HOME },
+      ...drives.map(d => ({ path: d, icon: 'disk', label: T('Disque {d}', { d: d.slice(0, 2) }), hint: T('tout le disque') })),
+      { path: H('Downloads'), icon: 'download', label: T('Téléchargements'), hint: 'Downloads' },
     ].slice(0, 5);
   }
   return [
-    { path: HOME, icon: 'home', label: 'Dossier perso', hint: '~ — le plus utile' },
-    { path: '/', icon: 'disk', label: 'Disque entier', hint: IS_MAC ? '/ — tout le Mac' : '/' },
-    ...(IS_MAC ? [{ path: '/Applications', icon: 'apps', label: 'Applications', hint: '/Applications' }] : []),
-    { path: H('Downloads'), icon: 'download', label: 'Téléchargements', hint: '~/Downloads' },
+    { path: HOME, icon: 'home', label: T('Dossier perso'), hint: T('~ — le plus utile') },
+    { path: '/', icon: 'disk', label: T('Disque entier'), hint: IS_MAC ? T('/ — tout le Mac') : '/' },
+    ...(IS_MAC ? [{ path: '/Applications', icon: 'apps', label: T('Applications'), hint: '/Applications' }] : []),
+    { path: H('Downloads'), icon: 'download', label: T('Téléchargements'), hint: '~/Downloads' },
   ];
 }
 

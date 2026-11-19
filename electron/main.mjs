@@ -1,6 +1,6 @@
-// Processus principal de l'application Taupe (Electron).
-// Le moteur (scan + API) tourne dans un processus séparé (worker.mjs) pour garder la fenêtre fluide ;
-// il demande ici les actions natives : corbeille, Finder/Explorateur, Quick Look, sélecteur de dossier.
+// Main process of the Taupe desktop app (Electron).
+// The engine (scan + local API) runs in a separate utility process (worker.mjs) so the window stays
+// smooth; it asks this process for native actions: Trash, Finder/Explorer, Quick Look, folder picker.
 import { app, BrowserWindow, Menu, shell, dialog, utilityProcess, nativeTheme } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -15,11 +15,50 @@ if (!app.requestSingleInstanceLock()) app.quit();
 
 let win = null, worker = null, serverUrl = null, quitting = false;
 
-// Réglages persistants (apparence…)
+// Persistent settings (appearance, language)
 const SETTINGS = () => path.join(app.getPath('userData'), 'settings.json');
 const loadSettings = () => { try { return JSON.parse(fs.readFileSync(SETTINGS(), 'utf8')); } catch { return {}; } };
 const saveSettings = s => { try { fs.writeFileSync(SETTINGS(), JSON.stringify(s, null, 2)); } catch {} };
 const settings = loadSettings();
+
+// ---------- Language: system language by default, or the one picked in View → Language ----------
+const MSG = {
+  fr: {
+    file: 'Fichier', scan: 'Analyser un dossier…', rescan: 'Rescanner ce dossier', close: 'Fermer la fenêtre', quit: 'Quitter',
+    edit: 'Édition', view: 'Présentation', assistant: 'Afficher / masquer l’assistant', appearance: 'Apparence',
+    system: 'Comme le système', light: 'Clair', dark: 'Sombre', language: 'Langue',
+    reset: 'Taille réelle', zoomIn: 'Zoom avant', zoomOut: 'Zoom arrière', fullscreen: 'Plein écran',
+    window: 'Fenêtre', help: 'Aide', github: 'Taupe sur GitHub', issue: 'Signaler un problème',
+    pickTitle: 'Choisir un dossier à analyser', pickButton: 'Analyser',
+    engineTimeout: 'le moteur ne répond pas (20 s)', engineExit: 'moteur arrêté (code {code})',
+    engineCrash: 'Le moteur d’analyse s’est arrêté (mémoire insuffisante ?). L’application va redémarrer.',
+    engineFail: 'Impossible de démarrer le moteur : {msg}',
+  },
+  en: {
+    file: 'File', scan: 'Scan a Folder…', rescan: 'Rescan This Folder', close: 'Close Window', quit: 'Quit',
+    edit: 'Edit', view: 'View', assistant: 'Show / Hide Assistant', appearance: 'Appearance',
+    system: 'Same as System', light: 'Light', dark: 'Dark', language: 'Language',
+    reset: 'Actual Size', zoomIn: 'Zoom In', zoomOut: 'Zoom Out', fullscreen: 'Full Screen',
+    window: 'Window', help: 'Help', github: 'Taupe on GitHub', issue: 'Report an Issue',
+    pickTitle: 'Choose a folder to scan', pickButton: 'Scan',
+    engineTimeout: 'the engine is not responding (20 s)', engineExit: 'engine stopped (code {code})',
+    engineCrash: 'The scan engine stopped (out of memory?). The app will restart.',
+    engineFail: 'Could not start the engine: {msg}',
+  },
+};
+function lang() {
+  if (settings.lang === 'fr' || settings.lang === 'en') return settings.lang;
+  const sys = app.getPreferredSystemLanguages?.()[0] || app.getLocale() || 'en';
+  return sys.toLowerCase().startsWith('fr') ? 'fr' : 'en';
+}
+const T = (k, v = {}) => MSG[lang()][k].replace(/\{(\w+)\}/g, (m, x) => v[x] ?? m);
+const appUrl = () => `${serverUrl}?lang=${lang()}`;
+function setLang(mode) {
+  settings.lang = mode; saveSettings(settings);
+  buildMenu();
+  win?.loadURL(appUrl());
+}
+
 function setTheme(mode) {
   nativeTheme.themeSource = mode;
   settings.theme = mode; saveSettings(settings);
@@ -36,19 +75,19 @@ const ACTIONS = {
   reveal: p => { shell.showItemInFolder(p); },
   async open(p) { const err = await shell.openPath(p); if (err) throw new Error(err); },
   async quicklook(p) {
-    if (IS_MAC && win) return win.previewFile(p); // vrai Quick Look
+    if (IS_MAC && win) return win.previewFile(p); // real Quick Look
     const err = await shell.openPath(p); if (err) throw new Error(err);
   },
   openExternal: url => (/^https?:\/\//.test(url) ? shell.openExternal(url) : null),
   async pickFolder() {
-    const r = await dialog.showOpenDialog(win, { title: 'Choisir un dossier à analyser', buttonLabel: 'Analyser', properties: ['openDirectory', 'showHiddenFiles'] });
+    const r = await dialog.showOpenDialog(win, { title: T('pickTitle'), buttonLabel: T('pickButton'), properties: ['openDirectory', 'showHiddenFiles'] });
     return r.canceled ? null : r.filePaths[0];
   },
 };
 
 function startWorker() {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('le moteur ne répond pas (20 s)')), 20000);
+    const timeout = setTimeout(() => reject(new Error(T('engineTimeout'))), 20000);
     worker = utilityProcess.fork(path.join(DIR, 'worker.mjs'), [], {
       serviceName: 'Taupe Engine',
       execArgv: ['--max-old-space-size=8192'],
@@ -64,9 +103,9 @@ function startWorker() {
       }
     });
     worker.on('exit', code => {
-      if (!serverUrl) return reject(new Error(`moteur arrêté (code ${code})`));
+      if (!serverUrl) return reject(new Error(T('engineExit', { code })));
       if (quitting) return;
-      dialog.showErrorBox('Taupe', 'Le moteur d’analyse s’est arrêté (mémoire insuffisante ?). L’application va redémarrer.');
+      dialog.showErrorBox('Taupe', T('engineCrash'));
       app.relaunch(); app.exit(0);
     });
   });
@@ -81,39 +120,40 @@ function createWindow() {
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false },
   });
   win.once('ready-to-show', () => win.show());
-  setTimeout(() => { if (win && !win.isVisible()) win.show(); }, 4000); // filet de sécurité
-  // Jamais de navigation hors de l'app : les liens externes s'ouvrent dans le navigateur
+  setTimeout(() => { if (win && !win.isVisible()) win.show(); }, 4000); // safety net
+  // Never navigate away from the app: external links open in the browser
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https:\/\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith(serverUrl)) e.preventDefault(); });
   win.on('closed', () => { win = null; });
-  win.loadURL(serverUrl);
+  win.loadURL(appUrl());
 }
 
 const ui = js => () => win?.webContents.executeJavaScript(`window.taupe && window.taupe.${js}`).catch(() => {});
 function buildMenu() {
+  const radio = (items, current, onPick) => items.map(([id, label]) => ({ label, type: 'radio', checked: current === id, click: () => onPick(id) }));
   const template = [
     ...(IS_MAC ? [{ role: 'appMenu' }] : []),
-    { label: 'Fichier', submenu: [
-      { label: 'Analyser un dossier…', accelerator: 'CmdOrCtrl+O', click: ui('pick()') },
-      { label: 'Rescanner ce dossier', accelerator: 'CmdOrCtrl+Shift+R', click: ui('rescan()') },
+    { label: T('file'), submenu: [
+      { label: T('scan'), accelerator: 'CmdOrCtrl+O', click: ui('pick()') },
+      { label: T('rescan'), accelerator: 'CmdOrCtrl+Shift+R', click: ui('rescan()') },
       { type: 'separator' },
-      IS_MAC ? { role: 'close', label: 'Fermer la fenêtre' } : { role: 'quit', label: 'Quitter' },
+      IS_MAC ? { role: 'close', label: T('close') } : { role: 'quit', label: T('quit') },
     ] },
-    { role: 'editMenu', label: 'Édition' },
-    { label: 'Présentation', submenu: [
-      { label: 'Afficher / masquer l’assistant', accelerator: 'CmdOrCtrl+J', click: ui('toggleChat()') },
-      { label: 'Apparence', submenu: [['system', 'Comme le système'], ['light', 'Clair'], ['dark', 'Sombre']].map(([id, label]) =>
-        ({ label, type: 'radio', checked: (settings.theme || 'system') === id, click: () => setTheme(id) })) },
+    { role: 'editMenu', label: T('edit') },
+    { label: T('view'), submenu: [
+      { label: T('assistant'), accelerator: 'CmdOrCtrl+J', click: ui('toggleChat()') },
+      { label: T('appearance'), submenu: radio([['system', T('system')], ['light', T('light')], ['dark', T('dark')]], settings.theme || 'system', setTheme) },
+      { label: T('language'), submenu: radio([['system', T('system')], ['fr', 'Français'], ['en', 'English']], settings.lang || 'system', setLang) },
       { type: 'separator' },
-      { role: 'resetZoom', label: 'Taille réelle' }, { role: 'zoomIn', label: 'Zoom avant' }, { role: 'zoomOut', label: 'Zoom arrière' },
+      { role: 'resetZoom', label: T('reset') }, { role: 'zoomIn', label: T('zoomIn') }, { role: 'zoomOut', label: T('zoomOut') },
       { type: 'separator' },
-      { role: 'togglefullscreen', label: 'Plein écran' },
+      { role: 'togglefullscreen', label: T('fullscreen') },
       ...(app.isPackaged ? [] : [{ type: 'separator' }, { role: 'reload' }, { role: 'toggleDevTools' }]),
     ] },
-    { role: 'windowMenu', label: 'Fenêtre' },
-    { role: 'help', label: 'Aide', submenu: [
-      { label: 'Taupe sur GitHub', click: () => shell.openExternal(REPO) },
-      { label: 'Signaler un problème', click: () => shell.openExternal(`${REPO}/issues`) },
+    { role: 'windowMenu', label: T('window') },
+    { role: 'help', label: T('help'), submenu: [
+      { label: T('github'), click: () => shell.openExternal(REPO) },
+      { label: T('issue'), click: () => shell.openExternal(`${REPO}/issues`) },
     ] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -128,6 +168,6 @@ app.whenReady().then(async () => {
   if (['light', 'dark'].includes(settings.theme)) nativeTheme.themeSource = settings.theme;
   buildMenu();
   try { serverUrl = await startWorker(); }
-  catch (e) { dialog.showErrorBox('Taupe', `Impossible de démarrer le moteur : ${e.message}`); app.quit(); return; }
+  catch (e) { dialog.showErrorBox('Taupe', T('engineFail', { msg: e.message })); app.quit(); return; }
   createWindow();
 });

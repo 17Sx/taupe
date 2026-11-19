@@ -3,7 +3,8 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { diskSize, isSkipped, IS_WIN, HOME } from './platform.mjs';
+import { diskSize, isSkipped, HOME } from './platform.mjs';
+import { tr } from './i18n.mjs';
 
 export const F_DIR = 1, F_ERR = 2, F_LINK = 4, F_REMOVED = 8, F_SKIP = 16, F_PKG = 32;
 
@@ -131,11 +132,11 @@ const SUGGEST_META = {
   oldBig: ['Gros fichiers pas modifiés depuis plus d’un an', 'À trier à la main : archive-les sur un disque externe ou supprime-les.', 'check'],
   iosBackup: ['Sauvegardes iPhone/iPad', 'Les anciennes sauvegardes d’appareils que tu n’as plus sont inutiles.', 'check'],
 };
-function fmtAge(days) {
-  if (days < 1) return 'moins d’un jour';
-  if (days < 60) return Math.round(days) + ' jours';
-  if (days < 730) return Math.round(days / 30) + ' mois';
-  return Math.round(days / 365) + ' ans';
+function fmtAge(days, lang = 'en') {
+  if (days < 1) return tr(lang, 'moins d’un jour');
+  if (days < 60) return tr(lang, '{n} jours', { n: Math.round(days) });
+  if (days < 730) return tr(lang, '{n} mois', { n: Math.round(days / 30) });
+  return tr(lang, '{n} ans', { n: Math.round(days / 365) });
 }
 const joinP = (...p) => path.join(...p.filter(Boolean));
 
@@ -338,12 +339,12 @@ export class Session {
     };
   }
 
-  hogs(id) {
+  hogs(id, lang = 'en') {
     const s = this.store, out = [];
     this._each(id, c => {
       if (!(s.flags[c] & F_DIR)) return false;
       const h = hogOf(s.names[c], s.names[s.parent[c]]);
-      if (h && s.size[c] > 1e6) { out.push({ ...this.row(c), label: h[0], tip: h[1], c }); return false; }
+      if (h && s.size[c] > 1e6) { out.push({ ...this.row(c), label: tr(lang, h[0]), tip: tr(lang, h[1]), c }); return false; }
     });
     out.sort((a, b) => b.size - a.size);
     const base = this.pathOf(id);
@@ -374,7 +375,7 @@ export class Session {
   }
 
   // ---------- Suggestions automatiques (règles) ----------
-  suggestions(id) {
+  suggestions(id, lang = 'en') {
     const s = this.store, now = Date.now() / 1000, DAY = 86400, G = {}, dupes = new Map();
     const add = (key, c, note) => (G[key] ||= []).push({ c, note });
     const ageOf = c => (now - s.mtime[c]) / DAY;
@@ -387,14 +388,14 @@ export class Session {
         if (f & F_DIR) {
           if (f & (F_SKIP | F_ERR) || nm === '.git' || nm === '.Trash') continue;
           if (BUILD_CACHES.has(nm)) { if (sz > 20e6) add('build', c); continue; }
-          if (nm === 'node_modules') { if (sz > 50e6 && age > 45) add('nodeOld', c, `projet inactif depuis ${fmtAge(age)}`); continue; }
-          if (nm === '.venv' || nm === 'venv') { if (sz > 50e6 && age > 60) add('venv', c, `inactif depuis ${fmtAge(age)}`); continue; }
+          if (nm === 'node_modules') { if (sz > 50e6 && age > 45) add('nodeOld', c, tr(lang, 'projet inactif depuis {age}', { age: fmtAge(age, lang) })); continue; }
+          if (nm === '.venv' || nm === 'venv') { if (sz > 50e6 && age > 60) add('venv', c, tr(lang, 'inactif depuis {age}', { age: fmtAge(age, lang) })); continue; }
           if (nm === 'DerivedData' || nm === 'iOS DeviceSupport' || nm === 'watchOS DeviceSupport') { if (sz > 50e6) add('xcode', c); continue; }
           if (pname === 'Caches' && gname === 'Library') { if (sz > 100e6) add('cache', c); continue; }
           if (nm === 'Temp' && pname === 'Local') { if (sz > 100e6) add('temp', c); continue; }
           if ((ctx & 4) && APP_CACHE_DIRS.has(nm)) { if (sz > 100e6) add('cache', c); continue; }
-          if (pname === 'worktrees' && (gname === '.claude' || gname === '.git')) { if (sz > 50e6) add('worktree', c, `modifié il y a ${fmtAge(age)}`); continue; }
-          if (pname === 'Backup' && gname === 'MobileSync') { add('iosBackup', c, `du ${new Date(s.mtime[c] * 1000).toLocaleDateString('fr-FR')}`); continue; }
+          if (pname === 'worktrees' && (gname === '.claude' || gname === '.git')) { if (sz > 50e6) add('worktree', c, tr(lang, 'modifié il y a {age}', { age: fmtAge(age, lang) })); continue; }
+          if (pname === 'Backup' && gname === 'MobileSync') { add('iosBackup', c, tr(lang, 'du {date}', { date: new Date(s.mtime[c] * 1000).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US') })); continue; }
           let cx = ctx;
           if (nm === 'Downloads' || nm === 'Téléchargements') cx |= 1;
           if (nm === 'AppData') cx |= 4;
@@ -403,8 +404,8 @@ export class Session {
         } else {
           if (ctx & 2) continue;
           const dot = nm.lastIndexOf('.'), ext = dot > 0 ? nm.slice(dot + 1).toLowerCase() : '';
-          if ((ctx & 1) && INSTALLERS.has(ext) && age > 7 && sz > 5e6) add('installers', c, `téléchargé il y a ${fmtAge(age)}`);
-          else if (sz > 500e6 && age > 365) add('oldBig', c, `pas modifié depuis ${fmtAge(age)}`);
+          if ((ctx & 1) && INSTALLERS.has(ext) && age > 7 && sz > 5e6) add('installers', c, tr(lang, 'téléchargé il y a {age}', { age: fmtAge(age, lang) }));
+          else if (sz > 500e6 && age > 365) add('oldBig', c, tr(lang, 'pas modifié depuis {age}', { age: fmtAge(age, lang) }));
           if (ext === 'log' && sz > 100e6) add('logs', c);
           if (sz >= 50e6) { const k = sz + '|' + nm; const a = dupes.get(k); if (a) a.push(c); else dupes.set(k, [c]); }
         }
@@ -414,12 +415,12 @@ export class Session {
     for (const ids of dupes.values()) {
       if (ids.length < 2) continue;
       ids.sort((a, b) => s.mtime[b] - s.mtime[a]);
-      for (const c of ids.slice(1)) add('dupes', c, `copie de ${this.pathOf(ids[0])}`);
+      for (const c of ids.slice(1)) add('dupes', c, tr(lang, 'copie de {p}', { p: this.pathOf(ids[0]) }));
     }
     return Object.entries(G).map(([key, list]) => {
       list.sort((a, b) => s.size[b.c] - s.size[a.c]);
       const [title, why, risk] = SUGGEST_META[key];
-      return { key, title, why, risk, total: list.reduce((t, x) => t + s.size[x.c], 0), n: list.length,
+      return { key, title: tr(lang, title), why: tr(lang, why), risk, total: list.reduce((t, x) => t + s.size[x.c], 0), n: list.length,
         items: list.slice(0, 200).map(x => ({ ...this.row(x.c), path: this.pathOf(x.c), note: x.note || '' })) };
     }).sort((a, b) => b.total - a.total);
   }
@@ -428,13 +429,13 @@ export class Session {
   digest(id) {
     const s = this.store, total = s.size[id], now = Date.now() / 1000;
     const age = c => fmtAge((now - s.mtime[c]) / 86400);
-    const gb = b => (b / 1e9).toFixed(2) + ' Go';
+    const gb = b => (b / 1e9).toFixed(2) + ' GB';
     const thr = Math.max(total * 0.003, 100e6), tree = [];
     const walk = (n, depth) => {
       for (const c of s.sortedKids(n)) {
         if (s.size[c] < thr || tree.length >= 260) break;
         const dir = s.flags[c] & F_DIR;
-        tree.push(`${'  '.repeat(depth)}${this.pathOf(c)}${dir ? '/' : ''} — ${gb(s.size[c])}${dir ? `, ${s.count[c]} fichiers` : ''}, modifié il y a ${age(c)}`);
+        tree.push(`${'  '.repeat(depth)}${this.pathOf(c)}${dir ? '/' : ''} — ${gb(s.size[c])}${dir ? `, ${s.count[c]} files` : ''}, modified ${age(c)} ago`);
         if (dir && depth < 6 && !(s.flags[c] & F_PKG)) walk(c, depth + 1);
       }
     };
@@ -442,35 +443,35 @@ export class Session {
     const big = this.bigFiles(id, 50).map(r => `${joinP(this.pathOf(id), r.rel, r.name)} — ${gb(r.size)}, modifié il y a ${age(r.id)}`);
     const rules = this.suggestions(id).map(g => `• ${g.title} (${gb(g.total)}, ${g.n} éléments) :\n` +
       g.items.slice(0, 8).map(i => `    ${i.path} — ${gb(i.size)}${i.note ? ' — ' + i.note : ''}`).join('\n')).join('\n');
-    return `Dossier analysé : ${this.pathOf(id)} — ${gb(total)}, ${s.count[id]} fichiers\n\n` +
-      `## Arborescence des éléments les plus lourds (≥ ${gb(thr)})\n${tree.join('\n')}\n\n` +
-      `## 50 plus gros fichiers\n${big.join('\n')}\n\n` +
-      `## Candidats détectés par règles automatiques\n${rules || '(aucun)'}\n`;
+    return `Scanned folder: ${this.pathOf(id)} — ${gb(total)}, ${s.count[id]} files\n\n` +
+      `## Tree of the heaviest items (≥ ${gb(thr)})\n${tree.join('\n')}\n\n` +
+      `## 50 biggest files\n${big.join('\n')}\n\n` +
+      `## Candidates found by built-in rules\n${rules || '(none)'}\n`;
   }
 
   // ---------- Contexte du dossier affiché, pour le chat ----------
   chatContext(id) {
     const s = this.store, now = Date.now() / 1000, total = s.size[id] || 1;
     const age = c => fmtAge((now - s.mtime[c]) / 86400);
-    const sz = b => b >= 1e9 ? (b / 1e9).toFixed(2) + ' Go' : (b / 1e6).toFixed(1) + ' Mo';
+    const sz = b => b >= 1e9 ? (b / 1e9).toFixed(2) + ' GB' : (b / 1e6).toFixed(1) + ' MB';
     const line = (c, ind = '') => {
       const dir = s.flags[c] & F_DIR;
-      const extra = (s.flags[c] & F_ERR) ? ' [accès refusé]' : (s.flags[c] & F_SKIP) ? ' [autre volume, non analysé]' : '';
-      return `${ind}${this.pathOf(c)}${dir ? '/' : ''} — ${sz(s.size[c])} (${(s.size[c] / total * 100).toFixed(1)} %)${dir ? `, ${s.count[c]} fichiers` : ''}, modifié il y a ${age(c)}${extra}`;
+      const extra = (s.flags[c] & F_ERR) ? ' [access denied]' : (s.flags[c] & F_SKIP) ? ' [other volume, not scanned]' : '';
+      return `${ind}${this.pathOf(c)}${dir ? '/' : ''} — ${sz(s.size[c])} (${(s.size[c] / total * 100).toFixed(1)}%)${dir ? `, ${s.count[c]} files` : ''}, modified ${age(c)} ago${extra}`;
     };
     const kids = s.sortedKids(id);
-    const out = [`Dossier affiché à l'écran : ${this.pathOf(id)} — ${sz(s.size[id])}, ${s.count[id]} fichiers, ${kids.length} éléments directs`,
-      `Racine du scan : ${this.rootPath} — ${sz(s.size[this.rootId])}`, '', '## Contenu direct (trié par taille)'];
+    const out = [`Folder on screen: ${this.pathOf(id)} — ${sz(s.size[id])}, ${s.count[id]} files, ${kids.length} direct items`,
+      `Scan root: ${this.rootPath} — ${sz(s.size[this.rootId])}`, '', '## Direct contents (sorted by size)'];
     kids.slice(0, 70).forEach((c, i) => {
       out.push(line(c));
       if (i < 10 && (s.flags[c] & F_DIR)) for (const g of s.sortedKids(c).slice(0, 6)) out.push(line(g, '    '));
     });
-    if (kids.length > 70) out.push(`… et ${kids.length - 70} éléments plus petits`);
-    out.push('', '## Plus gros fichiers (sous-dossiers inclus)');
+    if (kids.length > 70) out.push(`… and ${kids.length - 70} smaller items`);
+    out.push('', '## Biggest files (including subfolders)');
     for (const r of this.bigFiles(id, 25)) out.push(line(r.id));
     const rules = this.suggestions(id);
     if (rules.length) {
-      out.push('', '## Nettoyage repéré par règles automatiques');
+      out.push('', '## Cleanup found by built-in rules');
       for (const g of rules) out.push(`• ${g.title} — ${sz(g.total)} (${g.n}) : ${g.items.slice(0, 4).map(i => i.path).join(', ')}`);
     }
     return out.join('\n');

@@ -2,7 +2,7 @@
   "name": "taupe",
   "productName": "Taupe",
   "version": "1.0.0",
-  "description": "Explorateur d'espace disque rapide pour macOS et Windows, avec assistant IA (Claude / ChatGPT).",
+  "description": "Fast disk space explorer for macOS and Windows, with an AI assistant (Claude / ChatGPT).",
   "type": "module",
   "main": "electron/main.mjs",
   "author": "17Sx",

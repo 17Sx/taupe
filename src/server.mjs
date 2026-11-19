@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { Session } from './scanner.mjs';
 import * as ai from './ai.mjs';
+import { tr, pickLang } from './i18n.mjs';
 import { HOME, PLATFORM, IS_MAC, expand, isProtected, places, fallbackActions } from './platform.mjs';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -17,7 +18,8 @@ const MCP_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'mcp.mj
 const DEMO = process.env.TAUPE_DEMO_AI === '1';
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
-class HttpError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
+// msg is a French key translated at send time (see src/i18n.mjs); vars fill its {placeholders}
+class HttpError extends Error { constructor(code, msg, vars) { super(msg); this.code = code; this.vars = vars; } }
 
 async function volume(p) {
   try { const v = await fsp.statfs(p); return { total: v.blocks * v.bsize, free: v.bavail * v.bsize }; } catch { return null; }
@@ -51,16 +53,16 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
   }
 
   // Met à la Corbeille des éléments déjà validés ({id, path, size}) ; refuse les chemins protégés
-  async function trashItems(items) {
+  async function trashItems(items, lang = 'en') {
     // si un dossier ET son contenu sont demandés, on ne garde que le dossier
     const top = items.filter(it => !items.some(o => o !== it && it.path.startsWith(o.path + sep)));
     const todo = [], failed = [];
-    for (const it of top) (isProtected(it.path) ? failed.push({ ...it, error: 'Chemin protégé (système ou dossier principal)' }) : todo.push(it));
+    for (const it of top) (isProtected(it.path) ? failed.push({ ...it, error: tr(lang, 'Chemin protégé (système ou dossier principal)') }) : todo.push(it));
     const errors = todo.length ? await actions.trash(todo.map(t => t.path)) : {};
     const done = [];
     for (const it of todo) {
       let gone = false; try { await fsp.lstat(it.path); } catch { gone = true; }
-      if (gone) { session.store.unlink(it.id); done.push(it); } else failed.push({ ...it, error: errors[it.path] || 'Non déplacé' });
+      if (gone) { session.store.unlink(it.id); done.push(it); } else failed.push({ ...it, error: errors[it.path] || tr(lang, 'Non déplacé') });
     }
     return { done, failed, freed: done.reduce((a, t) => a + t.size, 0) };
   }
@@ -73,8 +75,8 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
   const item = id => { const r = session.row(id); return { id, path: session.pathOf(id), name: r.name, size: r.size, dir: r.dir, count: r.count, mtime: r.mtime }; };
   const folderOf = (chat, p) => {
     const id = p ? find(p) : chat.folder;
-    if (id < 0 || !session.valid(id)) throw new HttpError(404, `Dossier introuvable dans le scan : ${p}`);
-    if (!session.row(id).dir) throw new HttpError(400, `Ce n’est pas un dossier : ${p}`);
+    if (id < 0 || !session.valid(id)) throw new HttpError(404, 'Dossier introuvable dans le scan : {p}', { p });
+    if (!session.row(id).dir) throw new HttpError(400, 'Ce n’est pas un dossier : {p}', { p });
     return id;
   };
   const clamp = (v, d, max) => Math.max(1, Math.min(max, Number(v) || d));
@@ -144,26 +146,28 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
   };
 
   // Agent de démonstration (TAUPE_DEMO_AI=1, développement uniquement) : enchaîne de vraies actions sans IA
-  async function demoAgent(c) {
+  async function demoAgent(c, lang = 'en') {
+    const fr = lang === 'fr';
     await pause(900);
     const s = await TOOL_IMPL.search_files(c, { query: 'node_modules' });
     await pause(500);
     await TOOL_IMPL.big_files(c, { limit: 5 });
-    if (!s.results.length) return 'Je n’ai trouvé aucun dossier `node_modules` ici.';
+    if (!s.results.length) return fr ? 'Je n’ai trouvé aucun dossier `node_modules` ici.' : 'I found no `node_modules` folder here.';
     await pause(400);
     await TOOL_IMPL.select_items(c, { paths: s.results.slice(0, 3).map(r => r.path) });
     await pause(700);
-    const t = await TOOL_IMPL.move_to_trash(c, { paths: s.results.map(r => r.path), reason: 'Dépendances npm : un « npm install » les recrée.' });
-    return t.trashed?.length ? `J’ai mis ${t.trashed.length} dossiers \`node_modules\` à la corbeille.` : 'D’accord, je n’ai rien supprimé.';
+    const t = await TOOL_IMPL.move_to_trash(c, { paths: s.results.map(r => r.path), reason: fr ? 'Dépendances npm : un « npm install » les recrée.' : 'npm dependencies: “npm install” recreates them.' });
+    if (fr) return t.trashed?.length ? `J’ai mis ${t.trashed.length} dossiers \`node_modules\` à la corbeille.` : 'D’accord, je n’ai rien supprimé.';
+    return t.trashed?.length ? `I moved ${t.trashed.length} \`node_modules\` folders to the Trash.` : 'OK, I did not delete anything.';
   }
 
   const api = {
-    'GET /api/status': async () => ({ ...session.status(), home: HOME, platform: PLATFORM, app, version, sep,
-      places: places(), canPick: app, volume: await volume(session.rootPath || HOME) }),
+    'GET /api/status': async (_, q, lang) => ({ ...session.status(), home: HOME, platform: PLATFORM, app, version, sep,
+      places: places(lang), canPick: app, volume: await volume(session.rootPath || HOME) }),
     'POST /api/pick': async () => ({ path: await actions.pickFolder() }),
     'POST /api/scan': async b => {
       const p = expand(b.path);
-      let st; try { st = await fsp.stat(p); } catch { throw new HttpError(400, `Chemin introuvable : ${p}`); }
+      let st; try { st = await fsp.stat(p); } catch { throw new HttpError(400, 'Chemin introuvable : {p}', { p }); }
       if (!st.isDirectory()) throw new HttpError(400, 'Ce chemin n’est pas un dossier');
       return { id: await session.start(p) };
     },
@@ -173,13 +177,13 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
     'GET /api/treemap': (_, q) => session.treemap(needId(q.get('id'))),
     'GET /api/bigfiles': (_, q) => session.bigFiles(needId(q.get('id'))),
     'GET /api/types': (_, q) => session.types(needId(q.get('id'))),
-    'GET /api/hogs': (_, q) => session.hogs(needId(q.get('id'))),
-    'GET /api/suggest': (_, q) => session.suggestions(needId(q.get('id'))),
+    'GET /api/hogs': (_, q, lang) => session.hogs(needId(q.get('id')), lang),
+    'GET /api/suggest': (_, q, lang) => session.suggestions(needId(q.get('id')), lang),
 
     // ----- IA : comptes -----
     'GET /api/ai': async (_, q) => ({ job: aiView(), labels: ai.PROVIDERS, login: ai.loginState(),
       providers: { ...await ai.statusAll(q.get('refresh') === '1'), ...(DEMO ? { demo: { installed: true, loggedIn: true, detail: 'Agent de démonstration' } } : {}) } }),
-    'POST /api/ai/connect': b => { ai.connect(b.provider); return { ok: true }; },
+    'POST /api/ai/connect': (b, _, lang) => { ai.connect(b.provider, lang); return { ok: true }; },
     'POST /api/ai/login/code': b => { ai.loginCode(String(b.code || '')); return { ok: true }; },
     'POST /api/ai/login/cancel': () => { ai.loginCancel(); return { ok: true }; },
     'POST /api/ai/logout': async b => { await ai.logout(b.provider); return { ok: true }; },
@@ -190,25 +194,26 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
     },
 
     // ----- IA : chat + analyse -----
-    'POST /api/chat/start': async b => {
+    'POST /api/chat/start': async (b, _, hdrLang) => {
+      const lang = pickLang(b.lang || hdrLang);
       const id = needId(b.id);
       const provider = ai.PROVIDERS[b.provider] || (DEMO && b.provider === 'demo') ? b.provider : 'claude';
       const msgs = (Array.isArray(b.messages) ? b.messages : []).filter(m => m && typeof m.content === 'string');
       if (!msgs.length) throw new HttpError(400, 'Message vide');
       let ctx = session.chatContext(id);
       const vol = await volume(session.rootPath || HOME);
-      if (vol) ctx += `\n\nDisque : ${(vol.free / 1e9).toFixed(1)} Go libres sur ${(vol.total / 1e9).toFixed(1)} Go`;
-      ctx += `\nSystème : ${IS_MAC ? 'macOS' : PLATFORM === 'win32' ? 'Windows' : 'Linux'}`;
+      if (vol) ctx += `\n\nDisk: ${(vol.free / 1e9).toFixed(1)} GB free of ${(vol.total / 1e9).toFixed(1)} GB`;
+      ctx += `\nOS: ${IS_MAC ? 'macOS' : PLATFORM === 'win32' ? 'Windows' : 'Linux'}`;
       const sel = (b.selection || []).filter(p => typeof p === 'string').slice(0, 50);
-      if (sel.length) ctx += `\n\n## Éléments actuellement cochés par l'utilisateur\n${sel.join('\n')}`;
-      if (session.scanning) ctx += '\n\n(Le scan est encore en cours : les tailles peuvent être incomplètes.)';
+      if (sel.length) ctx += `\n\n## Items currently checked by the user\n${sel.join('\n')}`;
+      if (session.scanning) ctx += '\n\n(The scan is still running: sizes may be incomplete.)';
       const chat = { id: crypto.randomBytes(8).toString('hex'), folder: id, provider, status: 'running', events: [], pending: new Map(),
         answer: '', links: [], error: '', started: Date.now(), ended: 0, proc: null };
       chats.set(chat.id, chat);
       for (const [k, c] of chats) if (Date.now() - c.started > 3600e3) chats.delete(k); // ménage
       const mcp = { command: process.execPath, args: [MCP_PATH],
         env: { ELECTRON_RUN_AS_NODE: '1', TAUPE_URL: selfUrl, TAUPE_TOKEN: TOKEN, TAUPE_CHAT: chat.id } };
-      (provider === 'demo' ? demoAgent(chat) : ai.chatAgent(provider, ctx, msgs, mcp, p => (chat.proc = p)))
+      (provider === 'demo' ? demoAgent(chat, lang) : ai.chatAgent(provider, ctx, msgs, mcp, p => (chat.proc = p), lang))
         .then(answer => Object.assign(chat, { status: 'done', answer, links: session.linksIn(answer) }))
         .catch(e => { if (chat.status === 'running') Object.assign(chat, { status: 'error', error: e.message }); })
         .finally(() => { chat.ended = Date.now(); for (const r of chat.pending.values()) r(false); });
@@ -235,16 +240,17 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
       const c = chats.get(b.chat);
       if (!c || c.status !== 'running') throw new HttpError(409, 'Conversation terminée');
       const fn = TOOL_IMPL[b.name];
-      if (!fn) throw new HttpError(404, `Outil inconnu : ${b.name}`);
+      if (!fn) throw new HttpError(404, 'Outil inconnu : {p}', { p: b.name });
       return fn(c, b.args || {});
     },
-    'POST /api/ai/start': async b => {
+    'POST /api/ai/start': async (b, _, hdrLang) => {
+      const lang = pickLang(b.lang || hdrLang);
       if (aiJob?.status === 'running') throw new HttpError(409, 'Une analyse IA est déjà en cours');
       if (session.scanning) throw new HttpError(409, 'Attends la fin du scan avant de lancer l’analyse IA');
       const id = needId(b.id);
       const provider = ai.PROVIDERS[b.provider] ? b.provider : 'claude';
       const job = aiJob = { status: 'running', provider, started: Date.now(), ended: 0, target: session.pathOf(id), store: session.store, result: null, error: null };
-      ai.analyze(provider, session.digest(id)).then(raw => {
+      ai.analyze(provider, session.digest(id), lang).then(raw => {
         const items = [];
         for (const x of raw.suggestions || []) {
           const p = expand(String(x.path || '').replace(/[\\/]+$/, ''));
@@ -268,16 +274,16 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
     'POST /api/reveal': async b => { await actions.reveal(pathFor(b.id)); return { ok: true }; },
     'POST /api/open': async b => { await actions.open(pathFor(b.id)); return { ok: true }; },
     'POST /api/quicklook': async b => { await actions.quicklook(pathFor(b.id)); return { ok: true }; },
-    'POST /api/trash': async b => {
+    'POST /api/trash': async (b, _, lang) => {
       // Le client envoie {id, path} : on vérifie que l'id pointe TOUJOURS vers ce chemin
       // (sinon l'arbre a changé entre-temps → on refuse plutôt que de supprimer autre chose).
       const items = [], failed = [];
       for (const it of b.items || []) {
         const id = Number(it.id);
         if (session.valid(id) && session.pathOf(id) === it.path) items.push({ id, path: it.path, size: session.store.size[id] });
-        else failed.push({ id, path: String(it.path), size: 0, error: 'L’élément a changé depuis l’affichage — recharge' });
+        else failed.push({ id, path: String(it.path), size: 0, error: tr(lang, 'L’élément a changé depuis l’affichage — recharge') });
       }
-      const r = await trashItems(items);
+      const r = await trashItems(items, lang);
       return { done: r.done, failed: [...failed, ...r.failed], freed: r.freed };
     },
   };
@@ -296,22 +302,24 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
   }
 
   const server = http.createServer(async (req, res) => {
+    let lang = 'en';
     try {
       // Anti DNS-rebinding : on ne répond qu'à nous-mêmes
       const host = req.headers.host || '';
-      if (host !== `127.0.0.1:${PORT}` && host !== `localhost:${PORT}`) return send(res, 403, { error: 'Host refusé' });
+      lang = pickLang(req.headers['x-lang']);
+      if (host !== `127.0.0.1:${PORT}` && host !== `localhost:${PORT}`) return send(res, 403, { error: tr(lang, 'Host refusé') });
       const url = new URL(req.url, `http://${host}`);
 
       if (url.pathname.startsWith('/api/')) {
         // Anti-CSRF : jeton secret injecté dans la page
-        if (req.headers['x-token'] !== TOKEN) return send(res, 403, { error: 'Jeton invalide — recharge la page' });
+        if (req.headers['x-token'] !== TOKEN) return send(res, 403, { error: tr(lang, 'Jeton invalide — recharge la page') });
         const fn = api[`${req.method} ${url.pathname}`];
-        if (!fn) return send(res, 404, { error: 'Route inconnue' });
+        if (!fn) return send(res, 404, { error: tr(lang, 'Route inconnue') });
         const body = req.method === 'POST' ? await readBody(req) : {};
-        return send(res, 200, await fn(body, url.searchParams));
+        return send(res, 200, await fn(body, url.searchParams, lang));
       }
 
-      if (req.method !== 'GET') return send(res, 405, { error: 'Méthode refusée' });
+      if (req.method !== 'GET') return send(res, 405, { error: tr(lang, 'Méthode refusée') });
       const rel = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
       const file = path.normalize(path.join(PUBLIC, rel));
       if (!file.startsWith(PUBLIC + path.sep)) return send(res, 403, 'Interdit', 'text/plain');
@@ -319,7 +327,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
       if (rel === 'index.html') data = data.toString().replace('__TOKEN__', TOKEN).replace('__PLATFORM__', PLATFORM).replace('__APP__', app ? '1' : '0');
       send(res, 200, data, MIME[path.extname(file)] || 'application/octet-stream');
     } catch (e) {
-      send(res, e.code >= 400 && e.code < 600 ? e.code : 500, { error: e.message });
+      send(res, e.code >= 400 && e.code < 600 ? e.code : 500, { error: tr(lang, e.message, e.vars) });
     }
   });
 
