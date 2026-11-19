@@ -6,17 +6,18 @@
   <meta name="token" content="__TOKEN__">
   <title>Taupe</title>
   <link rel="stylesheet" href="style.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐾</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%23FF5F00'/><rect x='18' y='18' width='34' height='64' rx='6' fill='%230B0B0B'/><rect x='58' y='18' width='24' height='29' rx='6' fill='%230B0B0B'/><rect x='58' y='53' width='24' height='29' rx='6' fill='%230B0B0B'/></svg>">
 </head>
-<body>
+<body data-platform="__PLATFORM__" data-app="__APP__">
   <header class="top">
-    <a class="logo" id="logo" href="#" title="Retour à la racine du scan">🐾 <b>Taupe</b></a>
+    <a class="logo" id="logo" href="#" title="Retour à la racine du scan"><span class="logo-mark"><i></i><i></i><i></i></span><b>Taupe</b></a>
     <form id="scanForm" class="scanform">
       <input id="pathInput" spellcheck="false" autocomplete="off" placeholder="Chemin à analyser (~, /, ~/Documents…)">
+      <button class="btn ghost" type="button" id="pickBtn" title="Choisir un dossier…" hidden>Parcourir…</button>
       <button class="btn primary" type="submit">Analyser</button>
     </form>
     <div class="vol" id="vol"></div>
-    <button class="btn ghost sm" id="chatToggle" title="Afficher / masquer l’assistant IA">💬 Chat</button>
+    <button class="btn ghost sm" id="chatToggle" title="Afficher / masquer l’assistant IA">Assistant</button>
   </header>
 
   <div class="progress" id="progress" hidden>
@@ -28,8 +29,9 @@
   <div class="workspace">
   <aside class="chat" id="chat" hidden>
     <div class="chathead">
-      <b>💬 Assistant</b>
+      <b>Assistant</b>
       <span class="chatctx" id="chatCtx"></span>
+      <button class="iconbtn" data-accounts title="Comptes IA (Claude / ChatGPT)">⚙︎</button>
       <button class="iconbtn" id="chatClear" title="Nouvelle conversation">↺</button>
       <button class="iconbtn" id="chatClose" title="Masquer le chat">×</button>
     </div>
@@ -45,16 +47,10 @@
   </aside>
 
   <main id="welcome" class="welcome" hidden>
-    <h1>Où est passé ton espace disque&nbsp;?</h1>
+    <h1>Où est passé ton <span class="hl">espace disque</span>&nbsp;?</h1>
     <p class="muted">Choisis quoi analyser. Rien n’est supprimé sans ta confirmation, et tout part à la Corbeille.</p>
-    <div class="cards">
-      <button class="card" data-path="~"><span>🏠</span><b>Dossier perso</b><small>~ — le plus utile</small></button>
-      <button class="card" data-path="/"><span>💻</span><b>Disque entier</b><small>/ — tout le Mac</small></button>
-      <button class="card" data-path="/Applications"><span>🧩</span><b>Applications</b><small>/Applications</small></button>
-      <button class="card" data-path="~/Downloads"><span>⬇️</span><b>Téléchargements</b><small>~/Downloads</small></button>
-    </div>
-    <p class="hint">💡 Pour tout voir (Mail, Messages, Photos…), donne l’<b>Accès complet au disque</b> à ton Terminal :
-      Réglages Système → Confidentialité et sécurité → Accès complet au disque.</p>
+    <div class="cards" id="cards"></div>
+    <p class="hint" id="hint"></p>
   </main>
 
   <main id="app" class="app" hidden>
@@ -73,7 +69,7 @@
       </div>
       <div class="tabs" id="tabs">
         <button data-tab="content" class="on">Contenu</button>
-        <button data-tab="suggest">✨ Suggestions</button>
+        <button data-tab="suggest">Suggestions</button>
         <button data-tab="big">Gros fichiers</button>
         <button data-tab="types">Par type</button>
         <button data-tab="hogs">Nettoyable</button>
@@ -118,6 +114,15 @@
         <button class="btn ghost" id="mCancel">Annuler</button>
         <button class="btn danger" id="mOk">Mettre à la corbeille</button>
       </div>
+    </div>
+  </div>
+
+  <div class="modal" id="aiModal" hidden>
+    <div class="dialog">
+      <h3>Comptes IA</h3>
+      <p class="muted small">Taupe utilise ton abonnement Claude ou ChatGPT via leurs outils officiels : pas de clé API, pas de frais en plus. L’IA ne voit que les noms, tailles et dates — jamais le contenu de tes fichiers.</p>
+      <div id="aiAccounts" class="accts"></div>
+      <div class="mbtns"><button class="btn ghost" id="aiModalClose">Fermer</button></div>
     </div>
   </div>
 
