@@ -214,14 +214,51 @@ export function loginState() {
   return { ...j, output: stripAnsi(j.output).slice(-600) };
 }
 
-export async function login(provider) {
+// Connexion en un clic : installe l'outil officiel s'il manque, puis lance la connexion.
+// L'état (phase install → login → done/error) est suivi par l'interface via loginState().
+export function connect(provider) {
   if (!PROVIDERS[provider]) throw new Error('Fournisseur inconnu');
   loginCancel();
-  const bin = await findBin(provider, true);
-  if (!bin) throw new Error(`CLI « ${provider} » non installée`);
+  const job = loginJob = { provider, status: 'running', phase: 'check', started: Date.now(), url: '', needsCode: false, output: '', proc: null };
+  (async () => {
+    let bin = await findBin(provider, true);
+    if (!bin) {
+      job.phase = 'install';
+      await runInstaller(provider, job);
+      if (job.status !== 'running') return;
+      bin = await findBin(provider, true);
+      if (!bin) throw new Error(`Installation terminée mais « ${provider} » reste introuvable. Redémarre Taupe.`);
+    }
+    if (job.status !== 'running') return;
+    job.phase = 'login';
+    startLogin(bin, provider, job);
+  })().catch(e => { if (job.status === 'running') Object.assign(job, { status: 'error', output: job.output + '\n' + e.message }); statusAt = 0; });
+}
+
+// Installeurs officiels (Claude Code : script d'Anthropic ; Codex : npm, ou Homebrew sur Mac)
+async function runInstaller(provider, job) {
+  let cmd, args;
+  if (provider === 'claude') {
+    if (IS_WIN) { cmd = 'powershell.exe'; args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'irm https://claude.ai/install.ps1 | iex']; }
+    else { cmd = '/bin/bash'; args = ['-c', 'curl -fsSL https://claude.ai/install.sh | bash']; }
+  } else {
+    const npm = await findBin('npm', true);
+    const brew = !IS_WIN && await findBin('brew', true);
+    if (npm) { cmd = npm; args = ['install', '-g', '@openai/codex']; }
+    else if (brew) { cmd = brew; args = ['install', 'codex']; }
+    else throw new Error('Installer ChatGPT (Codex) nécessite Node.js : installe-le depuis nodejs.org puis réessaie.');
+  }
+  await new Promise((resolve, reject) => {
+    const p = job.proc = spawnCli(cmd, args, { cwd: os.tmpdir(), env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
+    p.stdout.on('data', d => (job.output += d)); p.stderr.on('data', d => (job.output += d));
+    p.on('error', reject);
+    p.on('close', code => (code === 0 ? resolve() : reject(new Error(`Installation échouée (code ${code})`))));
+  });
+}
+
+function startLogin(bin, provider, job) {
   const args = provider === 'claude' ? ['auth', 'login', '--claudeai'] : ['login'];
-  const proc = spawnCli(bin, args, { cwd: os.tmpdir(), env: childEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
-  const job = loginJob = { provider, status: 'running', started: Date.now(), url: '', needsCode: false, output: '', proc };
+  const proc = job.proc = spawnCli(bin, args, { cwd: os.tmpdir(), env: childEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
   const onData = d => {
     job.output += d.toString();
     const clean = stripAnsi(job.output);
@@ -231,16 +268,16 @@ export async function login(provider) {
   };
   proc.stdout.on('data', onData); proc.stderr.on('data', onData);
   proc.on('error', e => Object.assign(job, { status: 'error', output: job.output + '\n' + e.message }));
-  proc.on('close', code => { if (job.status === 'running') job.status = code === 0 ? 'done' : 'error'; statusAt = 0; });
+  proc.on('close', code => { if (job.status === 'running') { job.status = code === 0 ? 'done' : 'error'; job.phase = job.status; } statusAt = 0; });
   setTimeout(() => { if (job.status === 'running') loginCancel(); }, 10 * 60 * 1000);
 }
 
 export function loginCode(code) {
-  if (loginJob?.status === 'running' && code) loginJob.proc.stdin.write(code.trim() + '\n');
+  if (loginJob?.status === 'running' && loginJob.phase === 'login' && code) loginJob.proc?.stdin?.write(code.trim() + '\n');
 }
 
 export function loginCancel() {
-  if (loginJob?.status === 'running') { loginJob.status = 'cancelled'; try { loginJob.proc.kill(); } catch {} }
+  if (loginJob?.status === 'running') { loginJob.status = 'cancelled'; try { loginJob.proc?.kill(); } catch {} }
 }
 
 export async function logout(provider) {

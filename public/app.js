@@ -178,7 +178,8 @@ function renderList(opts = {}) {
       <span class="mt r col-mt" title="${r.mtime ? new Date(r.mtime * 1000).toLocaleString('fr-FR') : ''}">${relTime(r.mtime)}</span>
     </div>`;
   });
-  if (!S.view.length) html = `<div class="empty">${S.filter ? 'Aucun résultat pour ce filtre' : S.tab === 'hogs' ? 'Rien de connu à nettoyer ici' : 'Dossier vide'}</div>`;
+  if (!S.view.length) html = `<div class="empty">${S.filter ? 'Aucun résultat pour ce filtre' : S.tab === 'hogs' ? 'Rien de connu à nettoyer ici'
+    : S.data.node.err ? `Accès refusé à ce dossier.<br><span class="small">${HINT || 'Vérifie les autorisations du système.'}</span>` : 'Dossier vide'}</div>`;
   if (S.rest && !S.filter) html += `<div class="rest">+ ${nf.format(S.rest.n)} autres éléments plus petits · ${fmtSize(S.rest.size)}</div>`;
   $('#list').innerHTML = html;
   $('#listInfo').textContent = `${nf.format(S.view.length)} élément${S.view.length > 1 ? 's' : ''}` + (S.tab === 'big' ? ' — les plus gros fichiers de ce dossier et sous-dossiers' : S.tab === 'hogs' ? ' — caches & dossiers régénérables connus' : '');
@@ -390,7 +391,7 @@ function renderAI(st) {
   } else if (j.status === 'error') {
     const auth = /authenticat|login|logged|expired|401|unauthorized/i.test(j.error);
     body = `<div class="aierr"><b>L’analyse a échoué.</b> <span class="muted small">${esc(j.error.slice(0, 400))}</span>
-      ${auth ? `<p>👉 Ton compte ${esc(AI_LABEL[j.provider])} n’est pas connecté. <button class="btn primary sm" data-accounts>Connecter mon compte</button></p>` : ''}</div>`;
+      ${auth ? `<p>Ton compte ${esc(AI_LABEL[j.provider])} n’est pas connecté.</p>${connectBlock(j.provider)}` : ''}</div>`;
   } else if (j.status === 'done') {
     const items = j.result.items;
     const safe = items.filter(x => x.risk === 'safe' && x.action === 'trash');
@@ -403,13 +404,13 @@ function renderAI(st) {
           (it.command ? `<div class="scmd"><code>${esc(it.command)}</code><button class="btn ghost sm" data-copy="${esc(it.command)}">Copier</button></div>` : ''),
       })).join('') || '<p class="muted">Aucune suggestion exploitable.</p>'}</div>`;
   } else {
-    body = !Object.values(PROVS).some(ready) ? `<p class="muted small">Connecte ton abonnement Claude ou ChatGPT pour obtenir une liste triée de ce que tu peux supprimer, avec le niveau de risque. L’IA ne voit que les noms, tailles et dates — jamais le contenu de tes fichiers.</p>` : `<p class="muted small">L’IA voit les noms, tailles et dates des éléments les plus lourds — <b>jamais le contenu de tes fichiers</b> — et propose quoi supprimer, avec le niveau de risque. Rien n’est supprimé sans toi.</p>`;
+    body = !anyReady() ? `<p class="muted small">Connecte ton abonnement Claude ou ChatGPT pour obtenir une liste triée de ce que tu peux supprimer, avec le niveau de risque. L’IA ne voit que les noms, tailles et dates — jamais le contenu de tes fichiers.</p>${connectBlock()}` : `<p class="muted small">L’IA voit les noms, tailles et dates des éléments les plus lourds — <b>jamais le contenu de tes fichiers</b> — et propose quoi supprimer, avec le niveau de risque. Rien n’est supprimé sans toi.</p>`;
   }
-  $('#aiPanel').innerHTML = `<div class="aihead"><h2 class="stitle">${svg('sparkle')} Analyse IA</h2><span class="grow"></span>
-      ${Object.values(PROVS).some(ready) ? `<select id="aiProv"${running ? ' disabled' : ''}>${opts}</select>
-      <button class="btn ghost sm" data-accounts data-icon-inline>${svg('gear')} Comptes</button>
+  $('#aiPanel').innerHTML = `<div class="aihead"><h2 class="stitle">Analyse IA</h2><span class="grow"></span>
+      ${anyReady() ? `<select id="aiProv"${running ? ' disabled' : ''}>${opts}</select>
+      <button class="btn ghost sm" data-accounts>Comptes</button>
       <button class="btn primary sm" id="aiStart"${running ? ' disabled' : ''}>${j.status === 'done' ? 'Relancer' : 'Analyser ce dossier'}</button>`
-      : `<button class="btn primary sm" data-accounts>Connecter un compte</button>`}</div>${body}`;
+      : ''}</div>${body}`;
   clearTimeout(aiTimer);
   if (running && S.tab === 'suggest') aiTimer = setTimeout(refreshAI, 1500);
 }
@@ -519,9 +520,9 @@ function renderChat() {
   const box = $('#chatMsgs');
   if (!CHAT.length && !chatBusy) {
     box.innerHTML = PROVS && !Object.values(PROVS).some(ready)
-      ? `<div class="onboard"><span class="ob-ic">${svg('sparkle')}</span><b>Connecte ton IA</b>
+      ? `<div class="onboard"><b>Connecte ton IA</b>
           <p>Pose des questions sur tes dossiers avec ton abonnement Claude ou ChatGPT. Pas de clé API, pas de frais en plus.</p>
-          <button class="btn primary sm" data-accounts>Connecter un compte</button></div>`
+          ${connectBlock()}</div>`
       : `<div class="chatempty"><p>Pose-moi des questions sur le dossier affiché : je vois les noms, tailles et dates (pas le contenu de tes fichiers).</p>
           ${CHAT_IDEAS.map(q => `<button class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
     return;
@@ -553,7 +554,7 @@ async function sendChat(text) {
   } catch (e) {
     const auth = /authenticat|login|logged|expired|401|unauthorized/i.test(e.message);
     CHAT.push({ role: 'assistant', error: true, provider, content: e.message.slice(0, 400) +
-      (auth ? `\n\n👉 Ton compte n’est pas connecté : clique sur ⚙︎ en haut du chat pour le connecter.` : '') });
+      (auth ? `\n\nTon compte n’est pas connecté : clique sur « Comptes » en haut de l’assistant.` : '') });
   }
   clearInterval(chatTimer);
   chatBusy = false; $('#chatSend').disabled = false;
@@ -567,77 +568,108 @@ function openLink(a) {
   if (a.dataset.dir === '1') navigate(id); else navigate(parent, id);
 }
 
-// ---------- Comptes IA (Claude / ChatGPT) ----------
-let PROVS = null, accTimer = null, lastLogin = null;
+// ---------- Comptes IA (Claude / ChatGPT) : connexion en un clic ----------
+let PROVS = null, LOGIN = null, loginTimer = null, lastSig = '';
+const NAME = { claude: 'Claude', codex: 'ChatGPT' };
 const ready = p => !!(p && p.installed && p.loggedIn);
+const anyReady = () => !!PROVS && Object.values(PROVS).some(ready);
 function providerOptions() {
   if (!PROVS) return '';
   let pick = lsGet('taupe.ai') || 'claude';
   if (!ready(PROVS[pick])) pick = Object.keys(PROVS).find(k => ready(PROVS[k])) || pick;
-  return Object.keys(PROVS).map(k => {
-    const p = PROVS[k], tag = !p.installed ? ' (non installé)' : !p.loggedIn ? ' (non connecté)' : '';
-    return `<option value="${k}"${k === pick ? ' selected' : ''}${ready(p) ? '' : ' disabled'}>${esc(AI_LABEL[k])}${tag}</option>`;
-  }).join('');
+  return Object.keys(PROVS).filter(k => ready(PROVS[k])).map(k =>
+    `<option value="${k}"${k === pick ? ' selected' : ''}>${esc(AI_LABEL[k])}</option>`).join('');
 }
+
+// Bloc de connexion réutilisé (assistant, suggestions, fenêtre Comptes)
+function connectBlock(only) {
+  const L = LOGIN?.status === 'running' ? LOGIN : null;
+  if (L && (!only || only === L.provider)) {
+    if (L.phase !== 'login') return `<div class="cx"><p class="cx-wait"><span class="spin"></span><span>Installation de l’outil ${NAME[L.provider]} officiel… <span class="muted">environ 1 min</span></span></p>
+      <button class="linkbtn" data-cancel-login>Annuler</button></div>`;
+    return `<div class="cx"><p class="cx-wait"><span class="spin"></span><span>Connecte-toi dans la page ${NAME[L.provider]} qui vient de s’ouvrir.</span></p>
+      ${L.needsCode ? `<p class="muted small">Copie le code affiché à la fin : il est validé automatiquement dès que tu reviens ici.</p>
+        <div class="cx-code"><input id="loginCode" placeholder="ou colle le code ici" autocomplete="off" spellcheck="false"><button class="btn sm" data-code-submit>Valider</button></div>` : ''}
+      <p class="small">${L.url ? `<button class="linkbtn" data-ext="${esc(L.url)}">Rouvrir la page</button> · ` : ''}<button class="linkbtn" data-cancel-login>Annuler</button></p></div>`;
+  }
+  const failed = LOGIN && ['error'].includes(LOGIN.status) && (!only || only === LOGIN.provider)
+    ? `<p class="small cx-err">La connexion à ${NAME[LOGIN.provider]} a échoué. ${esc(stripLast(LOGIN.output))}</p>` : '';
+  const ks = (only ? [only] : ['claude', 'codex']).filter(k => !ready(PROVS?.[k]));
+  return `<div class="cx">${failed}<div class="cx-btns">${ks.map((k, i) =>
+    `<button class="btn ${i === 0 ? 'primary' : ''} sm" data-connect="${k}">Continuer avec ${NAME[k]}</button>`).join('')}</div></div>`;
+}
+const stripLast = t => (t || '').split('\n').map(x => x.trim()).filter(Boolean).pop() || '';
+
 async function loadProviders(refresh) {
   try {
     const st = await get('/api/ai' + (refresh ? '?refresh=1' : ''));
-    PROVS = st.providers;
+    const wasRunning = LOGIN?.status === 'running';
+    const sig = JSON.stringify([st.providers, st.login && { ...st.login, output: '' }]);
+    const changed = sig !== lastSig; lastSig = sig;
+    PROVS = st.providers; LOGIN = st.login;
+    if (wasRunning && LOGIN?.status === 'done') { toast(`Compte ${esc(NAME[LOGIN.provider])} connecté`, 'ok'); return loadProviders(true); }
+    const any = anyReady();
     $('#chatProv').innerHTML = providerOptions();
-    const any = Object.values(PROVS).some(ready);
-    $('#chatInput').disabled = !any; $('#chatSend').disabled = !any || chatBusy; $('#chatProv').disabled = !any;
+    $('#chatInput').disabled = !any; $('#chatSend').disabled = !any || chatBusy; $('#chatProv').hidden = !any;
     $('#chatInput').placeholder = any ? 'Pose une question sur ce dossier… (Entrée pour envoyer)' : 'Connecte un compte IA pour discuter';
-    if ($('#aiProv') && st.job?.status !== 'running') $('#aiProv').innerHTML = providerOptions();
-    if (!chatBusy) renderChat();
+    const typing = document.activeElement?.id === 'loginCode';
+    if (changed && !typing) {
+      if (!chatBusy) renderChat();
+      if (!$('#aiModal').hidden) renderAccounts();
+      if (S.tab === 'suggest' && AI) renderAI({ ...AI, providers: PROVS });
+    }
+    clearTimeout(loginTimer);
+    if (LOGIN?.status === 'running') loginTimer = setTimeout(loadProviders, 1500);
     return st;
   } catch { return null; }
 }
 async function initChat() { renderChat(); await loadProviders(); }
 
-async function openAccounts() { $('#aiModal').hidden = false; await refreshAccounts(true); }
-function closeAccounts() { $('#aiModal').hidden = true; clearTimeout(accTimer); }
-async function refreshAccounts(refresh) {
-  clearTimeout(accTimer);
-  if ($('#aiModal').hidden) return;
-  if (document.activeElement?.id === 'loginCode') { accTimer = setTimeout(refreshAccounts, 2000); return; }
-  const st = await loadProviders(refresh); if (!st) return;
-  const L = st.login;
-  if (lastLogin?.status === 'running' && L && L.status === 'done') toast(`✓ Compte ${esc(AI_LABEL[L.provider])} connecté`, 'ok');
-  lastLogin = L;
-  const NAME = { claude: 'Claude', codex: 'ChatGPT' }, TOOL = { claude: 'Claude Code', codex: 'Codex' };
-  $('#aiAccounts').innerHTML = Object.keys(st.providers).map(k => {
-    const p = st.providers[k], lj = L && L.provider === k ? L : null, running = lj?.status === 'running';
-    const chip = !p.installed ? '<span class="risk bad">Non installé</span>' : p.loggedIn ? '<span class="risk ok">Connecté</span>' : '<span class="risk warn">Non connecté</span>';
-    let body;
-    if (!p.installed) body = `<p class="small">Installe une fois l’outil officiel <b>${TOOL[k]}</b> dans ${IS_WIN ? 'PowerShell' : 'le Terminal'} :</p>
-      <div class="scmd"><code>${esc(p.install)}</code><button class="btn ghost sm" data-copy="${esc(p.install)}">Copier</button></div>
-      <p class="small muted">${k === 'codex' ? 'Nécessite Node.js. ' : ''}<a href="#" data-ext="${esc(p.docs)}">Guide d’installation</a> · puis <a href="#" data-recheck>revérifier</a></p>`;
-    else if (running) body = `<p class="small">🌐 La page de connexion officielle s’est ouverte dans ton navigateur : connecte-toi avec ton compte ${NAME[k]}, puis reviens ici.</p>
-      ${lj.url ? `<p class="small"><a href="#" data-ext="${esc(lj.url)}">Rouvrir la page de connexion</a></p>` : ''}
-      ${lj.needsCode ? `<div class="scmd"><input id="loginCode" placeholder="Colle ici le code affiché" autocomplete="off"><button class="btn primary sm" data-code>Valider</button></div>` : ''}
-      <p class="small aistate"><span class="spin"></span> En attente de la connexion… <button class="btn ghost sm" data-cancel>Annuler</button></p>`;
-    else if (p.loggedIn) body = `<p class="small muted">${esc(p.detail || 'Prêt à l’emploi')}</p><button class="btn ghost sm" data-logout="${k}">Se déconnecter</button>`;
-    else body = `<p class="small">Connecte ton abonnement ${k === 'claude' ? 'Claude (Pro / Max)' : 'ChatGPT (Plus / Pro)'} : la page de connexion officielle s’ouvre dans ton navigateur.</p>
-      ${lj?.status === 'error' ? `<p class="small err">La connexion a échoué. ${esc(lj.output.split('\n').filter(Boolean).pop() || '')}</p>` : ''}
-      <button class="btn primary sm" data-login="${k}">Se connecter</button>`;
-    return `<div class="acct"><div class="accthead"><b>${NAME[k]}</b>${chip}</div>${body}</div>`;
+function renderAccounts() {
+  if (document.activeElement?.id === 'loginCode') return;
+  $('#aiAccounts').innerHTML = Object.keys(PROVS || {}).map(k => {
+    const p = PROVS[k];
+    const state = !p.installed ? 'Non installé' : p.loggedIn ? 'Connecté' : 'Non connecté';
+    const body = ready(p)
+      ? `<p class="small muted">${esc(p.detail || 'Prêt')}</p><button class="linkbtn" data-logout="${k}">Se déconnecter</button>`
+      : connectBlock(k);
+    return `<div class="acct"><div class="accthead"><b>${NAME[k]}</b><span class="muted small">${state}</span></div>${body}</div>`;
   }).join('');
-  accTimer = setTimeout(refreshAccounts, L?.status === 'running' ? 2000 : 20000);
 }
-$('#aiModal').addEventListener('click', async e => {
-  const t = e.target;
-  if (t.id === 'aiModal' || t.id === 'aiModalClose') return closeAccounts();
+async function openAccounts() { $('#aiModal').hidden = false; renderAccounts(); lastSig = ''; await loadProviders(true); }
+function closeAccounts() { $('#aiModal').hidden = true; }
+
+async function submitCode(code) {
+  code = (code || '').trim();
+  if (!code) return;
+  try { await post('/api/ai/login/code', { code }); toast('Code envoyé, connexion en cours…', '', 2500); loadProviders(); } catch (e) { toast(esc(e.message), 'err'); }
+}
+// Claude affiche un code à recopier : dès qu'on revient dans Taupe, on le lit dans le presse-papiers.
+let lastClip = '';
+window.addEventListener('focus', async () => {
+  if (LOGIN?.status !== 'running' || LOGIN.phase !== 'login' || !LOGIN.needsCode) return;
   try {
-    if (t.dataset.login) { await post('/api/ai/login', { provider: t.dataset.login }); return refreshAccounts(); }
-    if (t.hasAttribute('data-cancel')) { await post('/api/ai/login/cancel'); return refreshAccounts(true); }
-    if (t.dataset.logout) { await post('/api/ai/logout', { provider: t.dataset.logout }); return refreshAccounts(true); }
-    if (t.hasAttribute('data-code')) { await post('/api/ai/login/code', { code: $('#loginCode').value }); $('#loginCode').blur(); return refreshAccounts(); }
-    if (t.dataset.copy != null) { await navigator.clipboard.writeText(t.dataset.copy); return toast('Commande copiée', 'ok', 2000); }
-    if (t.dataset.ext) { e.preventDefault(); return post('/api/external', { url: t.dataset.ext }); }
-    if (t.hasAttribute('data-recheck')) { e.preventDefault(); return refreshAccounts(true); }
+    const t = (await navigator.clipboard.readText()).trim();
+    if (t && t !== lastClip && /^[\w\-.~]{20,}(#[\w\-.~]+)?$/.test(t) && t.length < 500) { lastClip = t; submitCode(t); }
+  } catch {}
+});
+
+document.addEventListener('click', async e => {
+  const t = e.target.closest('[data-connect],[data-cancel-login],[data-code-submit],[data-logout],[data-ext],[data-accounts],#aiModalClose');
+  if (!t && e.target.id === 'aiModal') return closeAccounts();
+  if (!t) return;
+  e.preventDefault();
+  try {
+    if (t.id === 'aiModalClose') return closeAccounts();
+    if (t.dataset.accounts !== undefined) return openAccounts();
+    if (t.dataset.connect) { lastClip = ''; await post('/api/ai/connect', { provider: t.dataset.connect }); return loadProviders(); }
+    if (t.dataset.cancelLogin !== undefined) { await post('/api/ai/login/cancel'); return loadProviders(true); }
+    if (t.dataset.codeSubmit !== undefined) return submitCode($('#loginCode')?.value);
+    if (t.dataset.logout) { await post('/api/ai/logout', { provider: t.dataset.logout }); return loadProviders(true); }
+    if (t.dataset.ext) return post('/api/external', { url: t.dataset.ext });
   } catch (err) { toast(esc(err.message), 'err'); }
 });
-document.addEventListener('click', e => { if (e.target.closest('[data-accounts]')) { e.preventDefault(); openAccounts(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'loginCode') submitCode(e.target.value); });
 
 $('#chatForm').addEventListener('submit', e => { e.preventDefault(); sendChat($('#chatInput').value); });
 $('#chatInput').addEventListener('keydown', e => {
@@ -704,15 +736,15 @@ async function pickFolder() {
 const HINT = IS_MAC ? `Pour tout voir (Mail, Messages, Photos…), donne l’<b>Accès complet au disque</b> à ${IS_APP ? 'Taupe' : 'ton Terminal'} : Réglages Système → Confidentialité et sécurité → Accès complet au disque.`
   : IS_WIN ? 'Certains dossiers système demandent les droits administrateur : clic droit sur Taupe → <b>Exécuter en tant qu’administrateur</b> pour tout voir.' : '';
 function renderWelcome(st) {
-  const cards = (st.places || []).map(p => `<button class="card" data-path="${esc(p.path)}"><span class="pi">${svg(p.icon)}</span><b>${esc(p.label)}</b><small>${esc(p.hint)}</small></button>`);
-  if (IS_APP) cards.push('<button class="card" data-pick="1"><span class="pi">' + svg('pick') + '</span><b>Choisir un dossier…</b><small>' + MOD + 'O</small></button>');
+  const cards = (st.places || []).map(p => `<button class="card" data-path="${esc(p.path)}"><b>${esc(p.label)}</b><small>${esc(p.hint)}</small></button>`);
+  if (IS_APP) cards.push('<button class="card" data-pick="1"><b>Choisir un dossier…</b><small>' + MOD + 'O</small></button>');
   $('#cards').innerHTML = cards.join('');
   $('#hint').innerHTML = HINT;
 }
 function applyPlatformLabels() {
   for (const el of document.querySelectorAll('[data-icon]')) el.insertAdjacentHTML('afterbegin', svg(el.dataset.icon));
-  $('#finderBtn').lastChild.textContent = FM; $('#finderBtn').title = `Ouvrir dans le ${FM}`;
-  $('#trashBtn').innerHTML = `${svg('trash')} Mettre à la corbeille <kbd>${TRASH_KEY}</kbd>`;
+  $('#finderBtn').textContent = FM; $('#finderBtn').title = `Ouvrir dans le ${FM}`;
+  $('#trashBtn').innerHTML = `Mettre à la corbeille <kbd>${TRASH_KEY}</kbd>`;
   $('.keyhint').textContent = `↑↓ naviguer · → ouvrir · ← remonter · Espace aperçu · ${IS_MAC ? '⌘' : 'Ctrl'}/⇧clic sélection · ${TRASH_KEY} corbeille`;
   $('#pickBtn').hidden = !IS_APP;
 }

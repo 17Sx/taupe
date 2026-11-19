@@ -472,3 +472,27 @@ input[type=checkbox]:disabled { opacity: .25 !important; cursor: default; }
 .onboard b { font-weight: 600; font-size: 13.5px; }
 .onboard p { margin: 0 0 4px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .chatform textarea:disabled { opacity: .55; cursor: not-allowed; }
+
+/* Liens-boutons texte (sans icône) */
+.linkbtn { border: 0; background: none; padding: 2px 4px; color: var(--muted); cursor: pointer; font-size: 12px; border-radius: 5px; }
+.linkbtn:hover { color: var(--orange); }
+.chathead .linkbtn { font-size: 11.5px; }
+
+/* Connexion en un clic */
+.cx { display: flex; flex-direction: column; gap: 6px; }
+.cx-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.cx-wait { display: flex; align-items: center; gap: 8px; margin: 2px 0; font-size: 12.5px; }
+.cx-code { display: flex; gap: 6px; }
+.cx-code input { flex: 1; min-width: 0; background: transparent; border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; outline: none; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.cx-code input:focus { border-color: var(--orange); }
+.cx-err { color: var(--orange); margin: 0; }
+.cx .small { margin: 0; }
+.aipanel .cx { margin-top: 8px; }
+
+/* Accueil sans icônes */
+.welcome .card { padding: 18px 12px; gap: 4px; }
+.onboard { border-style: solid; }
+.cx { align-items: flex-start; }
+.cx-wait { align-items: flex-start; line-height: 1.45; }
+.cx-wait .spin { margin-top: 2px; }
+.cx-code { align-self: stretch; }

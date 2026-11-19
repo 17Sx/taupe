@@ -13,6 +13,6 @@ Première version publique.
 - Scan parallèle très rapide avec affichage en direct, liste triée et treemap.
 - Onglets Gros fichiers, Par type, Nettoyable et **Suggestions** (règles automatiques avec niveau de risque).
 - **Assistant IA** contextuel et **analyse IA** via ton abonnement Claude (Claude Code) ou ChatGPT (Codex CLI).
-- Fenêtre **Comptes IA** : statut, connexion et déconnexion depuis l'app.
+- **Connexion en un clic** à Claude ou ChatGPT : installation automatique de l'outil officiel si besoin, page de connexion dans le navigateur, code Claude détecté automatiquement.
 - Mise à la Corbeille native, « Afficher dans le Finder / l'Explorateur », Quick Look sur macOS, sélecteur de dossier natif.
 - Identité visuelle blanc / noir / orange, icônes au trait fin, thèmes clair et sombre (menu Présentation → Apparence).
