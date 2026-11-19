@@ -1,9 +1,9 @@
-## Quoi / pourquoi
+## What / why
 
-<!-- Ce que change cette PR et pourquoi. -->
+<!-- What this PR changes and why. -->
 
-## Vérifié
+## Checked
 
-- [ ] `npm run check` et `npm test` passent
-- [ ] Testé dans l'application (`npm start`) sur : macOS / Windows
-- [ ] CHANGELOG.md mis à jour (section « Non publié »)
+- [ ] `npm run check` and `npm test` pass
+- [ ] Tested in the app (`npm start`) on: macOS / Windows
+- [ ] CHANGELOG.md updated ("Unreleased" section)

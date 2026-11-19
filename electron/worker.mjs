@@ -1,5 +1,5 @@
-// Processus « moteur » de l'application : scan + API locale.
-// Les actions natives (corbeille, Finder, Quick Look…) sont relayées au processus principal.
+// The app's "engine" process: scanning + local API.
+// Native actions (Trash, Finder, Quick Look…) are relayed to the main process.
 import { startServer } from '../src/server.mjs';
 
 const port = process.parentPort;

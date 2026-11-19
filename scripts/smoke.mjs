@@ -1,6 +1,6 @@
-// Test de bout en bout du moteur (sans Electron), exécuté en CI sur macOS, Windows et Linux :
-// crée une arborescence temporaire, la scanne via l'API, vérifie tailles/chemins/suggestions/sécurité,
-// puis met un fichier à la corbeille avec les actions système de secours.
+// End-to-end test of the engine (without Electron), run in CI on macOS, Windows and Linux:
+// creates a temporary tree, scans it through the API, checks sizes/paths/suggestions/safety,
+// then moves a file to the Trash with the fallback system actions.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
