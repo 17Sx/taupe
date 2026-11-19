@@ -1,12 +1,13 @@
-// Analyse IA via les CLI locales, qui utilisent ton abonnement :
-//   - claude (Claude Code)  → abonnement Claude
-//   - codex  (Codex CLI)    → abonnement ChatGPT
-// Seule la structure (chemins, tailles, dates) est envoyée, jamais le contenu des fichiers.
+// AI analysis through the local CLIs, which use your subscription:
+//   - claude (Claude Code)  → Claude subscription
+//   - codex  (Codex CLI)    → ChatGPT subscription
+// Only the structure (paths, sizes, dates) is sent, never file contents.
 import { spawn, execFile } from 'node:child_process';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { tr } from './i18n.mjs';
 
 const HOME = os.homedir();
 export const PROVIDERS = { claude: 'Claude', codex: 'ChatGPT' };
@@ -33,28 +34,30 @@ const SCHEMA = {
   },
 };
 
-const PROMPT = `Tu es un expert macOS qui aide un développeur à libérer de l'espace disque.
-Ci-dessous : l'analyse d'un dossier de son Mac (arborescence des éléments lourds, plus gros fichiers, candidats repérés par des règles).
+const LANG_NAME = { fr: 'French', en: 'English' };
+const analysisPrompt = lang => `You are a disk-cleanup expert helping a developer free up disk space on their computer.
+Below: the analysis of one of their folders (tree of the heaviest items, biggest files, candidates found by built-in rules).
 
-Propose jusqu'à 25 actions concrètes, triées par espace récupéré (le plus gros d'abord), pour libérer de la place SANS perdre de données importantes.
+Suggest up to 25 concrete actions, sorted by space recovered (biggest first), to free space WITHOUT losing important data.
 
-Règles strictes :
-- "path" doit être EXACTEMENT un chemin présent dans les données ci-dessous (sans le "/" final), jamais inventé.
-- Ne propose jamais à la fois un dossier et un de ses sous-chemins.
-- "action" : "trash" = mettre ce chemin à la corbeille ; "command" = mieux vaut nettoyer avec une commande (ex : docker system prune, xcrun simctl delete unavailable, brew cleanup, git worktree prune), mets-la dans "command" ; "review" = à examiner à la main.
-- "command" : chaîne vide si action ≠ "command".
-- "risk" : "safe" = cache/régénérable ; "check" = probablement inutile mais à vérifier ; "careful" = données personnelles, à ne supprimer que si l'utilisateur est sûr.
-- Jamais : dossiers système, ~/Library entier, Documents/Desktop/Photos entiers, dossiers .git, code source de projets actifs.
-- Repère aussi ce que les règles ne voient pas : doublons de projets (ex : "projet-dupes", "projet copie"), vieux projets abandonnés, exports/vidéos oubliés, archives déjà décompressées, etc.
-- "title" : court (≤ 8 mots). "reason" : 1 à 2 phrases en français, concrètes (pourquoi c'est supprimable, comment le récupérer si besoin).
-- "summary" : 2-3 phrases en français sur où part l'espace et le gain total possible.
+Strict rules:
+- "path" must be EXACTLY a path present in the data below (no trailing "/"), never invented.
+- Never suggest both a folder and one of its sub-paths.
+- "action": "trash" = move this path to the Trash; "command" = better cleaned with a command (e.g. docker system prune, xcrun simctl delete unavailable, brew cleanup, git worktree prune), put it in "command"; "review" = to be checked by hand.
+- "command": empty string unless action is "command".
+- "risk": "safe" = cache / regenerable; "check" = probably useless but worth checking; "careful" = personal data, only delete if the user is sure.
+- Never: system folders, the whole ~/Library, whole Documents/Desktop/Photos, .git folders, source code of active projects.
+- Also spot what the rules miss: duplicated projects (e.g. "project-dupes", "project copy"), old abandoned projects, forgotten exports/videos, archives already extracted, etc.
+- "title": short (≤ 8 words). "reason": 1–2 concrete sentences (why it can be deleted, how to get it back if needed).
+- "summary": 2–3 sentences on where the space goes and the total possible gain.
+- Write "title", "reason" and "summary" in ${LANG_NAME[lang] || 'English'}.
 
-Réponds uniquement avec le JSON demandé.
+Answer only with the requested JSON.
 
-=== DONNÉES ===
+=== DATA ===
 `;
 
-// ---------- Localisation des binaires (macOS, Windows, Linux) ----------
+// ---------- Locating the binaries (macOS, Windows, Linux) ----------
 const IS_WIN = process.platform === 'win32';
 const binCache = new Map();
 async function findBin(name, fresh = false) {
@@ -71,7 +74,7 @@ async function findBin(name, fresh = false) {
     const p = path.join(d, n);
     try { fs.accessSync(p, IS_WIN ? fs.constants.F_OK : fs.constants.X_OK); if (fs.statSync(p).isFile()) { found = p; break outer; } } catch {}
   }
-  if (!found) { // dernier recours : demander au shell de l'utilisateur
+  if (!found) { // last resort: ask the user's shell
     found = await new Promise(res => IS_WIN
       ? execFile('where.exe', [name], { timeout: 6000 }, (e, out) => res(!e ? out.trim().split(/\r?\n/)[0] || null : null))
       : execFile(process.env.SHELL || '/bin/zsh', ['-lic', `command -v ${name}`], { timeout: 6000 },
@@ -83,14 +86,14 @@ async function findBin(name, fresh = false) {
 
 function childEnv() {
   const env = { ...process.env };
-  // On veut l'abonnement, pas une clé API facturée à l'usage ; et pas de détection « session imbriquée ».
-  // (et si Taupe est lancé depuis une app Claude, on ne réutilise pas son proxy/sa session)
+  // We want the subscription, not a pay-per-use API key; and no "nested session" detection.
+  // (and if Taupe is launched from a Claude app, don't reuse its proxy/session)
   for (const k of Object.keys(env)) if (/^(CLAUDE|ANTHROPIC_|OPENAI_API_KEY$|AI_AGENT$|BAGGAGE$|ELECTRON_)/.test(k)) delete env[k];
   return env;
 }
 
-// Sous Windows, les CLI installées par npm sont des scripts .cmd : il faut passer par cmd.exe
-// avec un échappement strict des arguments (même logique que le paquet cross-spawn).
+// On Windows, npm-installed CLIs are .cmd scripts: they must go through cmd.exe
+// with strict argument escaping (same logic as the cross-spawn package).
 function winQuote(arg, cmdShim) {
   arg = String(arg).replace(/(\\*)"/g, '$1$1\\"').replace(/(\\*)$/, '$1$1');
   arg = `"${arg}"`.replace(/[()%!^"<>&|]/g, '^$&');
@@ -104,12 +107,12 @@ function spawnCli(bin, args, opts) {
   return spawn(bin, args, { ...opts, windowsHide: true });
 }
 
-function runProc(bin, args, input, cwd, timeoutMs, onProc) {
+function runProc(bin, args, input, cwd, timeoutMs, onProc, lang = 'en') {
   return new Promise((resolve, reject) => {
     const p = spawnCli(bin, args, { cwd, env: childEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
     onProc?.(p);
     let out = '', err = '';
-    const t = setTimeout(() => { p.kill(); reject(new Error(`Délai dépassé (${timeoutMs / 1000} s)`)); }, timeoutMs);
+    const t = setTimeout(() => { p.kill(); reject(new Error(tr(lang, 'Délai dépassé ({p} s)', { p: timeoutMs / 1000 }))); }, timeoutMs);
     p.stdout.on('data', d => (out += d));
     p.stderr.on('data', d => (err += d));
     p.on('error', e => { clearTimeout(t); reject(e); });
@@ -127,21 +130,21 @@ function runProc(bin, args, input, cwd, timeoutMs, onProc) {
 function extractJson(text) {
   if (text && typeof text === 'object') return text;
   const a = text.indexOf('{'), b = text.lastIndexOf('}');
-  if (a < 0 || b < a) throw new Error('Réponse IA illisible');
+  if (a < 0 || b < a) throw new Error('Unreadable AI response');
   return JSON.parse(text.slice(a, b + 1));
 }
 
-// Appel unique à la CLI, sans aucun outil (lecture/écriture/shell désactivés).
-// schema → réponse JSON structurée ; sinon texte libre. fast → raisonnement réduit (chat).
-async function call(provider, input, { schema = null, fast = false, timeoutMs = 300000 } = {}) {
+// Single CLI call, with no tools at all (read/write/shell disabled).
+// schema → structured JSON response; otherwise free text. fast → reduced reasoning (chat).
+async function call(provider, input, { schema = null, fast = false, timeoutMs = 300000, lang = 'en' } = {}) {
   const bin = await findBin(provider);
-  if (!bin) throw new Error(`CLI « ${provider} » introuvable. Installe-la et connecte-toi d’abord.`);
+  if (!bin) throw new Error(tr(lang, 'CLI « {p} » introuvable. Connecte ton compte d’abord.', { p: provider }));
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'taupe-ai-'));
   try {
     if (provider === 'claude') {
       const args = ['-p', '--output-format', 'json', '--tools', '', '--no-session-persistence', '--strict-mcp-config'];
       if (schema) args.push('--json-schema', JSON.stringify(schema));
-      const res = JSON.parse(await runProc(bin, args, input, tmp, timeoutMs));
+      const res = JSON.parse(await runProc(bin, args, input, tmp, timeoutMs, null, lang));
       if (res.is_error) throw new Error(String(res.result || 'Erreur Claude'));
       return schema ? extractJson(res.structured_output ?? res.result) : String(res.result || '').trim();
     }
@@ -149,7 +152,7 @@ async function call(provider, input, { schema = null, fast = false, timeoutMs = 
     const args = ['exec', '--skip-git-repo-check', '--ephemeral', '-s', 'read-only', '-o', outFile];
     if (fast) args.push('-c', 'model_reasoning_effort="low"');
     if (schema) { const f = path.join(tmp, 'schema.json'); await fsp.writeFile(f, JSON.stringify(schema)); args.push('--output-schema', f); }
-    await runProc(bin, args, input, tmp, timeoutMs);
+    await runProc(bin, args, input, tmp, timeoutMs, null, lang);
     const text = await fsp.readFile(outFile, 'utf8');
     return schema ? extractJson(text) : text.trim();
   } finally {
@@ -157,30 +160,30 @@ async function call(provider, input, { schema = null, fast = false, timeoutMs = 
   }
 }
 
-export const analyze = (provider, digest) => call(provider, PROMPT + digest, { schema: SCHEMA });
+export const analyze = (provider, digest, lang = 'en') => call(provider, analysisPrompt(lang) + digest, { schema: SCHEMA, lang });
 
-const CHAT_PROMPT = `Tu es l'assistant intégré à Taupe, un explorateur d'espace disque sur l'ordinateur de l'utilisateur (un développeur).
-- Réponds en français, de façon concise et concrète : phrases courtes, listes, tailles chiffrées.
-- Tu vois la STRUCTURE du disque (noms, tailles, dates), jamais le contenu des fichiers : ne l'invente pas.
-- Tu peux AGIR dans Taupe avec les outils « taupe » :
-  search_files (chercher par nom), list_folder (voir un dossier), big_files (plus gros fichiers),
-  open_folder (montrer un dossier à l'utilisateur), select_items (cocher des éléments),
-  move_to_trash (proposer de mettre à la Corbeille).
-- Utilise ces outils dès que c'est utile : pour chercher, vérifier un dossier absent du contexte, montrer, sélectionner ou supprimer.
-- move_to_trash affiche une demande de confirmation et attend la réponse de l'utilisateur : c'est la SEULE façon de supprimer.
-  N'utilise jamais de commande shell ni aucun autre outil pour lire, déplacer ou supprimer des fichiers.
-- Ne propose jamais de supprimer des données personnelles sans le signaler clairement (photos, documents, projets actifs, travail non commité).
-- Quand tu cites un fichier ou un dossier, écris son chemin ABSOLU entre backticks, ex. \`/Users/x/projet/node_modules\` : il devient cliquable.
-- Après des actions, résume en une ou deux phrases ce que tu as fait.
+const chatPrompt = lang => `You are the assistant built into Taupe, a disk-space explorer running on the user's computer (the user is a developer).
+- Always answer in ${LANG_NAME[lang] || 'English'}, concisely and concretely: short sentences, lists, sizes with numbers.
+- You see the STRUCTURE of the disk (names, sizes, dates), never the contents of files: do not make them up.
+- You can ACT in Taupe with the "taupe" tools:
+  search_files (search by name), list_folder (read a folder), big_files (biggest files),
+  open_folder (show a folder to the user), select_items (check items),
+  move_to_trash (propose moving items to the Trash).
+- Use these tools whenever useful: to search, check a folder missing from the context, show, select or delete.
+- move_to_trash shows a confirmation card and waits for the user's answer; the user may untick some items. It is the ONLY way to delete.
+  Never use a shell command or any other tool to read, move or delete files.
+- Never suggest deleting personal data without clearly flagging it (photos, documents, active projects, uncommitted work).
+- When you mention a file or folder, write its ABSOLUTE path between backticks, e.g. \`/Users/x/project/node_modules\`: it becomes clickable.
+- After taking actions, sum up what you did in one or two sentences.
 `;
 const TOOL_NAMES = ['search_files', 'list_folder', 'big_files', 'open_folder', 'select_items', 'move_to_trash'];
 
-// Conversation « agent » : la CLI de l'IA lance notre serveur MCP (src/mcp.mjs) et n'a accès qu'à ses outils.
-export async function chatAgent(provider, context, messages, mcp, onProc) {
+// "Agent" conversation: the AI CLI launches our MCP server (src/mcp.mjs) and can only use its tools.
+export async function chatAgent(provider, context, messages, mcp, onProc, lang = 'en') {
   const bin = await findBin(provider);
-  if (!bin) throw new Error(`CLI « ${provider} » introuvable. Connecte ton compte d’abord.`);
-  const convo = messages.slice(-12).map(m => `${m.role === 'user' ? 'Utilisateur' : 'Assistant'} : ${String(m.content).slice(0, 4000)}`).join('\n\n');
-  const input = `${CHAT_PROMPT}\n=== CONTEXTE (dossier affiché) ===\n${context}\n\n=== CONVERSATION ===\n${convo}\n\nRéponds au dernier message de l'utilisateur.`;
+  if (!bin) throw new Error(tr(lang, 'CLI « {p} » introuvable. Connecte ton compte d’abord.', { p: provider }));
+  const convo = messages.slice(-12).map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${String(m.content).slice(0, 4000)}`).join('\n\n');
+  const input = `${chatPrompt(lang)}\n=== CONTEXT (folder on screen) ===\n${context}\n\n=== CONVERSATION ===\n${convo}\n\nAnswer the user's last message.`;
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'taupe-chat-'));
   try {
     if (provider === 'claude') {
@@ -188,7 +191,7 @@ export async function chatAgent(provider, context, messages, mcp, onProc) {
       await fsp.writeFile(cfg, JSON.stringify({ mcpServers: { taupe: { type: 'stdio', command: mcp.command, args: mcp.args, env: mcp.env } } }));
       const args = ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--strict-mcp-config', '--mcp-config', cfg,
         '--allowedTools', ...TOOL_NAMES.map(t => `mcp__taupe__${t}`)];
-      const res = JSON.parse(await runProc(bin, args, input, tmp, 600000, onProc));
+      const res = JSON.parse(await runProc(bin, args, input, tmp, 600000, onProc, lang));
       if (res.is_error) throw new Error(String(res.result || 'Erreur Claude'));
       return String(res.result || '').trim();
     }
@@ -199,14 +202,14 @@ export async function chatAgent(provider, context, messages, mcp, onProc) {
       '-c', `mcp_servers.taupe.command=${JSON.stringify(mcp.command)}`,
       '-c', `mcp_servers.taupe.args=${JSON.stringify(mcp.args)}`,
       '-c', `mcp_servers.taupe.env=${tomlEnv}`];
-    await runProc(bin, args, input, tmp, 600000, onProc);
+    await runProc(bin, args, input, tmp, 600000, onProc, lang);
     return (await fsp.readFile(out, 'utf8')).trim();
   } finally {
     fsp.rm(tmp, { recursive: true, force: true }).catch(() => {});
   }
 }
 
-// ---------- Comptes : statut, connexion, déconnexion ----------
+// ---------- Accounts: status, login, logout ----------
 export const INSTALL = {
   claude: { mac: 'curl -fsSL https://claude.ai/install.sh | bash', win: 'irm https://claude.ai/install.ps1 | iex',
     docs: 'https://docs.claude.com/en/docs/claude-code/setup' },
@@ -247,20 +250,20 @@ export function loginState() {
   return { ...j, output: stripAnsi(j.output).slice(-600) };
 }
 
-// Connexion en un clic : installe l'outil officiel s'il manque, puis lance la connexion.
-// L'état (phase install → login → done/error) est suivi par l'interface via loginState().
-export function connect(provider) {
-  if (!PROVIDERS[provider]) throw new Error('Fournisseur inconnu');
+// One-click login: installs the official tool if missing, then starts the login.
+// The state (phase install → login → done/error) is tracked by the UI via loginState().
+export function connect(provider, lang = 'en') {
+  if (!PROVIDERS[provider]) throw new Error(tr(lang, 'Fournisseur inconnu'));
   loginCancel();
   const job = loginJob = { provider, status: 'running', phase: 'check', started: Date.now(), url: '', needsCode: false, output: '', proc: null };
   (async () => {
     let bin = await findBin(provider, true);
     if (!bin) {
       job.phase = 'install';
-      await runInstaller(provider, job);
+      await runInstaller(provider, job, lang);
       if (job.status !== 'running') return;
       bin = await findBin(provider, true);
-      if (!bin) throw new Error(`Installation terminée mais « ${provider} » reste introuvable. Redémarre Taupe.`);
+      if (!bin) throw new Error(tr(lang, 'Installation terminée mais « {p} » reste introuvable. Redémarre Taupe.', { p: provider }));
     }
     if (job.status !== 'running') return;
     job.phase = 'login';
@@ -268,8 +271,8 @@ export function connect(provider) {
   })().catch(e => { if (job.status === 'running') Object.assign(job, { status: 'error', output: job.output + '\n' + e.message }); statusAt = 0; });
 }
 
-// Installeurs officiels (Claude Code : script d'Anthropic ; Codex : npm, ou Homebrew sur Mac)
-async function runInstaller(provider, job) {
+// Official installers (Claude Code: Anthropic's script; Codex: npm, or Homebrew on Mac)
+async function runInstaller(provider, job, lang = 'en') {
   let cmd, args;
   if (provider === 'claude') {
     if (IS_WIN) { cmd = 'powershell.exe'; args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'irm https://claude.ai/install.ps1 | iex']; }
@@ -279,13 +282,13 @@ async function runInstaller(provider, job) {
     const brew = !IS_WIN && await findBin('brew', true);
     if (npm) { cmd = npm; args = ['install', '-g', '@openai/codex']; }
     else if (brew) { cmd = brew; args = ['install', 'codex']; }
-    else throw new Error('Installer ChatGPT (Codex) nécessite Node.js : installe-le depuis nodejs.org puis réessaie.');
+    else throw new Error(tr(lang, 'Installer ChatGPT (Codex) nécessite Node.js : installe-le depuis nodejs.org puis réessaie.'));
   }
   await new Promise((resolve, reject) => {
     const p = job.proc = spawnCli(cmd, args, { cwd: os.tmpdir(), env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
     p.stdout.on('data', d => (job.output += d)); p.stderr.on('data', d => (job.output += d));
     p.on('error', reject);
-    p.on('close', code => (code === 0 ? resolve() : reject(new Error(`Installation échouée (code ${code})`))));
+    p.on('close', code => (code === 0 ? resolve() : reject(new Error(tr(lang, 'Installation échouée (code {p})', { p: code })))));
   });
 }
 

@@ -1,4 +1,4 @@
-// Vérifie la syntaxe de tous les fichiers JS/MJS du projet (multi-plateforme).
+// Checks the syntax of every JS/MJS file in the project (cross-platform).
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';

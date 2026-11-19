@@ -6,37 +6,39 @@ const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const PLATFORM = document.body.dataset.platform || 'darwin', IS_APP = document.body.dataset.app === '1';
 const IS_WIN = PLATFORM === 'win32', IS_MAC = PLATFORM === 'darwin';
 const SEP = IS_WIN ? '\\' : '/';
-const FM = IS_MAC ? 'Finder' : IS_WIN ? 'Explorateur' : 'Fichiers';
-const TRASH_KEY = IS_MAC ? '⌘⌫' : 'Suppr', MOD = IS_MAC ? '⌘' : 'Ctrl+';
+const FM = IS_MAC ? 'Finder' : IS_WIN ? t('Explorateur') : t('Fichiers');
+const TRASH_KEY = IS_MAC ? '⌘⌫' : t('Suppr'), MOD = IS_MAC ? '⌘' : 'Ctrl+';
 const joinPath = (a, b) => (b ? (a.endsWith(SEP) ? a + b : a + SEP + b) : a);
 
 async function api(method, url, body) {
-  const r = await fetch(url, { method, headers: { 'x-token': TOKEN, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const r = await fetch(url, { method, headers: { 'x-token': TOKEN, 'x-lang': LANG, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || r.statusText);
   return j;
 }
 const get = u => api('GET', u), post = (u, b) => api('POST', u, b || {});
 
-// ---------- Formatage ----------
-const nf = new Intl.NumberFormat('fr-FR');
-const rtf = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' });
+// ---------- Formatting ----------
+const nf = new Intl.NumberFormat(LOCALE);
+const rtf = new Intl.RelativeTimeFormat(LANG, { numeric: 'auto' });
+const dec = s => (LANG === 'fr' ? String(s).replace('.', ',') : String(s));
+const UNITS = LANG === 'fr' ? ['o', 'Ko', 'Mo', 'Go', 'To', 'Po'] : ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
 function fmtSize(b) {
-  if (!b) return '0 o';
-  if (b < 1000) return Math.round(b) + ' o';
-  const u = ['Ko', 'Mo', 'Go', 'To', 'Po']; let i = -1;
-  do { b /= 1000; i++; } while (b >= 1000 && i < u.length - 1);
-  return (b >= 100 ? Math.round(b) : b.toFixed(1)).toString().replace('.', ',') + ' ' + u[i];
+  if (!b) return '0 ' + UNITS[0];
+  if (b < 1000) return Math.round(b) + ' ' + UNITS[0];
+  let i = 0;
+  do { b /= 1000; i++; } while (b >= 1000 && i < UNITS.length - 1);
+  return dec(b >= 100 ? Math.round(b) : b.toFixed(1)) + ' ' + UNITS[i];
 }
 function relTime(sec) {
   if (!sec) return '';
   const d = sec - Date.now() / 1000, a = Math.abs(d);
   for (const [u, s] of [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]])
     if (a >= s) return rtf.format(Math.round(d / s), u);
-  return 'à l’instant';
+  return t('à l’instant');
 }
 const pct = (a, b) => (b ? (a / b) * 100 : 0);
-const fmtPct = p => (p >= 10 ? Math.round(p) : p >= 0.1 ? p.toFixed(1).replace('.', ',') : p > 0 ? '<0,1' : '0') + ' %';
+const fmtPct = p => (p >= 10 ? Math.round(p) : p >= 0.1 ? dec(p.toFixed(1)) : p > 0 ? '<' + dec('0.1') : '0') + (LANG === 'fr' ? ' %' : '%');
 let HOME = '';
 const pretty = p => (HOME && (p === HOME || p.startsWith(HOME + SEP)) ? '~' + p.slice(HOME.length) : p);
 
@@ -47,7 +49,7 @@ for (const [e, list] of Object.entries({
   '📕': 'pdf epub', '📝': 'doc docx pages txt md rtf odt', '📊': 'xls xlsx numbers csv ods', '📽️': 'ppt pptx key', '🗄️': 'db sqlite sqlite3 realm', '📜': 'log',
   '⚙️': 'js mjs cjs ts tsx jsx json py rb go rs swift java kt c h cpp m cs php html css scss vue svelte sh yml yaml toml lock sql',
 })) for (const x of list.split(' ')) EMOJI[x] = e;
-// Icônes au trait fin (16×16, trait 1.15) — tout en currentColor
+// Thin-stroke icons (16×16, stroke 1.15) — all in currentColor
 const SVG = {
   dir: '<path d="M1.75 4.5c0-.55.45-1 1-1h3.4l1.35 1.4h5.75c.55 0 1 .45 1 1v6.35c0 .55-.45 1-1 1H2.75c-.55 0-1-.45-1-1z"/>',
   file: '<path d="M4.25 1.75h4.9l2.6 2.6v9.9H4.25z"/><path d="M9.15 1.75v2.6h2.6"/>',
@@ -80,7 +82,7 @@ function iconKey(r) {
 const iconCls = r => ({ dir: 'dir', lock: 'lock', disk: 'file', pkg: 'pkg', link: 'file', file: 'file' })[iconKey(r)];
 const icon = r => svg(iconKey(r));
 
-// ---------- État ----------
+// ---------- State ----------
 const S = {
   root: null, cur: null, data: null, rows: [], rest: null, view: [], tab: 'content',
   sort: { k: 'size', d: -1 }, filter: '', sel: new Map(), focus: -1, anchor: -1,
@@ -95,7 +97,7 @@ function toast(msg, kind = '', ms = 5000) {
   setTimeout(() => t.remove(), ms);
 }
 
-// ---------- Vues ----------
+// ---------- Views ----------
 function show(which) {
   $('#welcome').hidden = which !== 'welcome';
   $('#app').hidden = which !== 'app';
@@ -106,26 +108,26 @@ function show(which) {
 function renderVol(v) {
   if (!v) return ($('#vol').innerHTML = '');
   const used = v.total - v.free;
-  $('#vol').innerHTML = `<div><b>${fmtSize(v.free)}</b> libres <span class="muted">sur ${fmtSize(v.total)}</span></div><div class="vbar"><i style="width:${pct(used, v.total).toFixed(1)}%"></i></div>`;
+  $('#vol').innerHTML = `<div>${t('<b>{free}</b> libres <span class="muted">sur {total}</span>', { free: fmtSize(v.free), total: fmtSize(v.total) })}</div><div class="vbar"><i style="width:${pct(used, v.total).toFixed(1)}%"></i></div>`;
 }
 
 function renderHeader() {
   const d = S.data, n = d.node;
   $('#crumbs').innerHTML = d.crumbs.map((c, i) =>
     `<a data-id="${c.id}" title="${esc(i ? c.name : c.name)}">${esc(i ? c.name : pretty(c.name))}</a>`).join('<span class="sep">›</span>');
-  $('#curName').textContent = d.crumbs.length > 1 ? n.name : d.path === HOME ? 'Dossier perso' : (pretty(n.name).split(SEP).filter(Boolean).pop() || n.name);
+  $('#curName').textContent = d.crumbs.length > 1 ? n.name : d.path === HOME ? t('Dossier perso') : (pretty(n.name).split(SEP).filter(Boolean).pop() || n.name);
   $('#curName').title = d.path;
-  let meta = `${fmtSize(n.size)} · ${nf.format(n.count)} fichiers`;
+  let meta = `${fmtSize(n.size)} · ${tn(n.count, '{n} fichier', '{n} fichiers')}`;
   if (S.root && S.cur === S.root.id && S.status?.volume && S.root.path === '/') {
     const used = S.status.volume.total - S.status.volume.free;
-    meta += ` · <span title="Différence entre l’espace utilisé et ce qui est visible : système, snapshots APFS (Time Machine), espace purgeable, fichiers d’autres utilisateurs non lisibles.">volume utilisé : ${fmtSize(used)} ⓘ</span>`;
+    meta += ` · <span title="${esc(t('Différence entre l’espace utilisé et ce qui est visible : système, snapshots APFS (Time Machine), espace purgeable, fichiers d’autres utilisateurs non lisibles.'))}">${t('volume utilisé : {x}', { x: fmtSize(used) })} ⓘ</span>`;
   }
   const errs = S.status?.scan?.errors;
-  if (errs) meta += ` · <span class="tag" title="Ces dossiers n’ont pas pu être lus (droits d’accès). ${esc(HINT.replace(/<[^>]+>/g, ''))}">⚠ ${nf.format(errs)} dossiers inaccessibles</span>`;
+  if (errs) meta += ` · <span class="tag" title="${esc(t('Ces dossiers n’ont pas pu être lus (droits d’accès).') + ' ' + HINT.replace(/<[^>]+>/g, ''))}">${tn(errs, '⚠ {n} dossier inaccessible', '⚠ {n} dossiers inaccessibles')}</span>`;
   $('#curMeta').innerHTML = meta;
   $('#upBtn').disabled = d.crumbs.length < 2;
   $('#chatCtx').textContent = pretty(d.path);
-  $('#chatCtx').title = 'L’assistant voit ce dossier : ' + d.path;
+  $('#chatCtx').title = t('L’assistant voit ce dossier : {p}', { p: d.path });
 }
 
 const COLS = [['', ''], ['name', 'Nom'], ['size', 'Taille'], ['pct', '%'], ['count', 'Fichiers'], ['mtime', 'Modifié']];
@@ -133,7 +135,7 @@ function renderThead() {
   $('#thead').innerHTML = COLS.map(([k, l], i) => {
     if (!k) return '<span></span>';
     const arrow = S.sort.k === k ? (S.sort.d < 0 ? ' ↓' : ' ↑') : '';
-    return `<span data-k="${k === 'pct' ? 'size' : k}" class="${i >= 2 ? 'r' : ''} col-${k}">${l}${arrow}</span>`;
+    return `<span data-k="${k === 'pct' ? 'size' : k}" class="${i >= 2 ? 'r' : ''} col-${k}">${t(l)}${arrow}</span>`;
   }).join('');
 }
 
@@ -145,7 +147,7 @@ function computeView() {
   }
   const { k, d } = S.sort;
   if (!(k === 'size' && d < 0)) {
-    v = [...v].sort((a, b) => k === 'name' ? d * a.name.localeCompare(b.name, 'fr', { numeric: true, sensitivity: 'base' }) : d * ((a[k] || 0) - (b[k] || 0)));
+    v = [...v].sort((a, b) => k === 'name' ? d * a.name.localeCompare(b.name, LANG, { numeric: true, sensitivity: 'base' }) : d * ((a[k] || 0) - (b[k] || 0)));
   }
   S.view = v;
 }
@@ -166,23 +168,23 @@ function renderList(opts = {}) {
   S.view.forEach((r, i) => {
     const sel = S.sel.has(r.id);
     const sub = S.tab === 'hogs' ? `${esc(r.label)} · ${esc(r.rel || '.')}` : S.tab === 'big' ? esc(r.rel || '.') : '';
-    const tags = (r.err ? '<span class="tag">accès refusé</span>' : '') + (r.skip ? '<span class="tag">autre volume</span>' : '');
+    const tags = (r.err ? `<span class="tag">${t('accès refusé')}</span>` : '') + (r.skip ? `<span class="tag">${t('autre volume')}</span>` : '');
     const barW = S.tab === 'content' ? pct(r.size, parent) : pct(r.size, max);
     html += `<div class="row${r.dir ? ' dir' : ''}${sel ? ' sel' : ''}${tall ? ' tall' : ''}" data-i="${i}"${r.tip ? ` title="${esc(r.tip)}"` : ''}>
       <span><input type="checkbox"${sel ? ' checked' : ''}></span>
       <span class="nm"><span class="ic ${iconCls(r)}">${icon(r)}</span><span class="t">${esc(r.name)}${sub ? `<small>${sub}</small>` : ''}</span>${tags}
-        <span class="ra"><button data-a="ql" title="Aperçu (Espace)">${svg('eye')}</button><button data-a="reveal" title="Afficher dans le ${FM}">${svg('reveal')}</button>${r.dir && !r.skip ? `<button data-a="go" title="Ouvrir (→)">${svg('chevron')}</button>` : ''}</span></span>
+        <span class="ra"><button data-a="ql" title="${t('Aperçu (Espace)')}">${svg('eye')}</button><button data-a="reveal" title="${t('Afficher dans le {fm}', { fm: FM })}">${svg('reveal')}</button>${r.dir && !r.skip ? `<button data-a="go" title="${t('Ouvrir (→)')}">${svg('chevron')}</button>` : ''}</span></span>
       <span class="sz"><span class="bar"><i style="width:${Math.max(barW, 0.3).toFixed(2)}%"></i></span><b>${fmtSize(r.size)}</b></span>
       <span class="pc r col-pc">${fmtPct(pct(r.size, parent))}</span>
       <span class="ct r col-ct">${r.dir ? nf.format(r.count) : ''}</span>
-      <span class="mt r col-mt" title="${r.mtime ? new Date(r.mtime * 1000).toLocaleString('fr-FR') : ''}">${relTime(r.mtime)}</span>
+      <span class="mt r col-mt" title="${r.mtime ? new Date(r.mtime * 1000).toLocaleString(LOCALE) : ''}">${relTime(r.mtime)}</span>
     </div>`;
   });
-  if (!S.view.length) html = `<div class="empty">${S.filter ? 'Aucun résultat pour ce filtre' : S.tab === 'hogs' ? 'Rien de connu à nettoyer ici'
-    : S.data.node.err ? `Accès refusé à ce dossier.<br><span class="small">${HINT || 'Vérifie les autorisations du système.'}</span>` : 'Dossier vide'}</div>`;
-  if (S.rest && !S.filter) html += `<div class="rest">+ ${nf.format(S.rest.n)} autres éléments plus petits · ${fmtSize(S.rest.size)}</div>`;
+  if (!S.view.length) html = `<div class="empty">${S.filter ? t('Aucun résultat pour ce filtre') : S.tab === 'hogs' ? t('Rien de connu à nettoyer ici')
+    : S.data.node.err ? `${t('Accès refusé à ce dossier.')}<br><span class="small">${HINT || t('Vérifie les autorisations du système.')}</span>` : t('Dossier vide')}</div>`;
+  if (S.rest && !S.filter) html += `<div class="rest">${t('+ {n} autres éléments plus petits · {size}', { n: nf.format(S.rest.n), size: fmtSize(S.rest.size) })}</div>`;
   $('#list').innerHTML = html;
-  $('#listInfo').textContent = `${nf.format(S.view.length)} élément${S.view.length > 1 ? 's' : ''}` + (S.tab === 'big' ? ' — les plus gros fichiers de ce dossier et sous-dossiers' : S.tab === 'hogs' ? ' — caches & dossiers régénérables connus' : '');
+  $('#listInfo').textContent = tn(S.view.length, '{n} élément', '{n} éléments') + (S.tab === 'big' ? t(' — les plus gros fichiers de ce dossier et sous-dossiers') : S.tab === 'hogs' ? t(' — caches & dossiers régénérables connus') : '');
   const fi = prevId != null ? S.view.findIndex(r => r.id === prevId) : -1;
   S.focus = -1;
   if (fi >= 0) setFocus(fi, !!opts.focusId);
@@ -198,7 +200,7 @@ function setFocus(i, scroll = true) {
   highlightTm(S.view[i].id);
 }
 
-// ---------- Chargement ----------
+// ---------- Loading ----------
 async function load(opts = {}) {
   const id = S.cur;
   if (id == null) return;
@@ -216,7 +218,7 @@ async function load(opts = {}) {
     else if (S.tab === 'hogs') { S.rows = await get(`/api/hogs?id=${id}`); S.rest = null; renderList(opts); }
     else renderTypes(await get(`/api/types?id=${id}`));
   } catch (e) {
-    if (/introuvable/i.test(e.message) && S.root && id !== S.root.id) { S.cur = S.root.id; S.loading = false; return load(); }
+    if (/introuvable|not found/i.test(e.message) && S.root && id !== S.root.id) { S.cur = S.root.id; S.loading = false; return load(); }
     toast(esc(e.message), 'err');
   } finally { S.loading = false; }
 }
@@ -242,7 +244,7 @@ function setTab(tab) {
 }
 
 // ---------- Treemap ----------
-// Palette : oranges et noirs/gris en alternance (TM_LIGHT = fond clair → texte noir)
+// Palette: alternating oranges and blacks/grays (TM_LIGHT = light background → black text)
 const TM_COLORS = ['#FF5F00', '#1A1A1A', '#FF8B3D', '#3D3D3B', '#C24800', '#5C5C59', '#FFB27A', '#262625', '#8F3600', '#7A7A76'];
 const TM_LIGHT = [true, false, true, false, false, false, true, false, false, false];
 function squarify(items, x, y, w, h) {
@@ -280,7 +282,7 @@ async function loadTreemap() {
     const data = await get(`/api/treemap?id=${id}`);
     if (id !== S.cur) return;
     S.tm = data; drawTreemap();
-  } catch { /* ignoré */ }
+  } catch { /* ignored */ }
 }
 
 function drawTreemap() {
@@ -310,7 +312,7 @@ function drawTreemap() {
     }
     html += '</div>';
   });
-  el.innerHTML = html || '<div class="empty">Rien à afficher</div>';
+  el.innerHTML = html || `<div class="empty">${t('Rien à afficher')}</div>`;
   if (S.focus >= 0) highlightTm(S.view[S.focus]?.id);
 }
 
@@ -328,21 +330,21 @@ function renderTypes(t) {
   const maxC = t.categories[0]?.size || 1, maxE = t.extensions[0]?.size || 1;
   const cat = t.categories.map(c => {
     const [e, col] = CAT_STYLE[c.key] || ['📄', '#888'];
-    return `<div class="trow"><span class="tdot" style="background:${col}"></span><span>${esc(c.label)}</span><span class="bar"><i style="width:${pct(c.size, maxC)}%;background:${col}"></i></span><b>${fmtSize(c.size)}</b><span class="muted small r">${fmtPct(pct(c.size, total))}</span></div>`;
+    return `<div class="trow"><span class="tdot" style="background:${col}"></span><span>${esc(t(c.label))}</span><span class="bar"><i style="width:${pct(c.size, maxC)}%;background:${col}"></i></span><b>${fmtSize(c.size)}</b><span class="muted small r">${fmtPct(pct(c.size, total))}</span></div>`;
   }).join('');
   const ext = t.extensions.map(x =>
-    `<div class="trow" style="cursor:pointer" data-ext="${esc(x.ext)}" title="Voir les plus gros fichiers .${esc(x.ext)}"><span class="ic file">${svg('file')}</span><span>${x.ext.startsWith('(') ? esc(x.ext) : '.' + esc(x.ext)}</span><span class="bar"><i style="width:${pct(x.size, maxE)}%;background:var(--orange)"></i></span><b>${fmtSize(x.size)}</b><span class="muted small">${nf.format(x.count)} fich.</span></div>`).join('');
-  $('#typesView').innerHTML = `<div><h3>Par catégorie</h3>${cat || '<p class="muted">Vide</p>'}
-    <p class="muted small">« Applications » = contenu des .app · « Dépendances & builds dev » = node_modules, .git, .next, venv, DerivedData…</p></div>
-    <div><h3>Par extension <span class="muted small">(hors apps & dépendances — clique pour voir les fichiers)</span></h3>${ext}</div>`;
+    `<div class="trow" style="cursor:pointer" data-ext="${esc(x.ext)}" title="${esc(t('Voir les plus gros fichiers .{ext}', { ext: x.ext }))}"><span class="ic file">${svg('file')}</span><span>${x.ext.startsWith('(') ? esc(t(x.ext)) : '.' + esc(x.ext)}</span><span class="bar"><i style="width:${pct(x.size, maxE)}%;background:var(--orange)"></i></span><b>${fmtSize(x.size)}</b><span class="muted small">${t('{n} fich.', { n: nf.format(x.count) })}</span></div>`).join('');
+  $('#typesView').innerHTML = `<div><h3>${t('Par catégorie')}</h3>${cat || `<p class="muted">${t('Vide')}</p>`}
+    <p class="muted small">${esc(t('« Applications » = contenu des .app · « Dépendances & builds dev » = node_modules, .git, .next, venv, DerivedData…'))}</p></div>
+    <div><h3>${t('Par extension')} <span class="muted small">${esc(t('(hors apps & dépendances — clique pour voir les fichiers)'))}</span></h3>${ext}</div>`;
 }
 
-// ---------- Suggestions (règles + IA) ----------
+// ---------- Suggestions (rules + AI) ----------
 const RISK = { safe: ['Sans risque', 'ok'], check: ['À vérifier', 'warn'], careful: ['Prudence', 'bad'] };
-const SUG = new Map();           // id → élément affiché (pour sélection / actions)
+const SUG = new Map();           // id → displayed element (for selection / actions)
 let RULES = [], AI = null, aiTimer = null;
 const expanded = new Set();
-const riskBadge = r => { const [l, c] = RISK[r] || RISK.check; return `<span class="risk ${c}">${l}</span>`; };
+const riskBadge = r => { const [l, c] = RISK[r] || RISK.check; return `<span class="risk ${c}">${t(l)}</span>`; };
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 
@@ -350,14 +352,14 @@ function sugItem(it, { extra = '', noSel = false } = {}) {
   SUG.set(it.id, it);
   const sel = S.sel.has(it.id);
   return `<div class="sitem${sel ? ' sel' : ''}" data-id="${it.id}">
-    <input type="checkbox"${sel ? ' checked' : ''}${noSel ? ' disabled title="Pas de mise à la corbeille directe pour celui-ci"' : ''}>
+    <input type="checkbox"${sel ? ' checked' : ''}${noSel ? ` disabled title="${t('Pas de mise à la corbeille directe pour celui-ci')}"` : ''}>
     <span class="ic ${iconCls(it)}">${icon(it)}</span>
     <div class="sbody">
       <div class="sname">${esc(it.title || it.name)}</div>
       <div class="spath" title="${esc(it.path)}">${esc(pretty(it.path))}${it.note ? ` <span class="muted">· ${esc(it.note)}</span>` : ''}</div>
       ${extra}
     </div>
-    <span class="sacts"><button data-a="reveal" title="Afficher dans le ${FM}">${svg('reveal')}</button>${it.dir ? `<button data-a="go" title="Ouvrir dans Taupe">${svg('chevron')}</button>` : ''}</span>
+    <span class="sacts"><button data-a="reveal" title="${t('Afficher dans le {fm}', { fm: FM })}">${svg('reveal')}</button>${it.dir ? `<button data-a="go" title="${t('Ouvrir dans Taupe')}">${svg('chevron')}</button>` : ''}</span>
     <b class="ssize">${fmtSize(it.size)}</b>
   </div>`;
 }
@@ -368,15 +370,15 @@ function renderRules(groups) {
   const html = groups.map(g => {
     const all = expanded.has(g.key), shown = all ? g.items : g.items.slice(0, 5);
     return `<div class="sgroup" data-key="${g.key}">
-      <div class="shead">${riskBadge(g.risk)}<h3>${esc(g.title)}</h3><span class="muted small">${nf.format(g.n)} élément${g.n > 1 ? 's' : ''}</span>
-        <span class="grow"></span><b>${fmtSize(g.total)}</b><button class="btn ghost sm" data-selall>Tout sélectionner</button></div>
+      <div class="shead">${riskBadge(g.risk)}<h3>${esc(g.title)}</h3><span class="muted small">${tn(g.n, '{n} élément', '{n} éléments')}</span>
+        <span class="grow"></span><b>${fmtSize(g.total)}</b><button class="btn ghost sm" data-selall>${t('Tout sélectionner')}</button></div>
       <p class="muted small swhy">${esc(g.why)}</p>
       <div class="sitems">${shown.map(it => sugItem(it)).join('')}</div>
-      ${g.items.length > 5 ? `<button class="more" data-more>${all ? 'Réduire' : `Voir les ${g.items.length - 5} autres`}</button>` : ''}
+      ${g.items.length > 5 ? `<button class="more" data-more>${all ? t('Réduire') : t('Voir les {n} autres', { n: g.items.length - 5 })}</button>` : ''}
     </div>`;
   }).join('');
-  $('#ruleGroups').innerHTML = `<h2 class="stitle">Repéré automatiquement <span class="muted">· ≈ ${fmtSize(total)}</span></h2>` +
-    (html || '<p class="muted">Rien de suspect selon les règles automatiques. Essaie l’analyse IA.</p>');
+  $('#ruleGroups').innerHTML = `<h2 class="stitle">${t('Repéré automatiquement')} <span class="muted">· ≈ ${fmtSize(total)}</span></h2>` +
+    (html || `<p class="muted">${t('Rien de suspect selon les règles automatiques. Essaie l’analyse IA.')}</p>`);
 }
 
 function renderAI(st) {
@@ -387,29 +389,29 @@ function renderAI(st) {
   const opts = providerOptions();
   let body = '';
   if (running) {
-    body = `<div class="aistate"><span class="spin"></span> ${esc(labels[j.provider] || j.provider)} analyse <b>${esc(pretty(j.target))}</b>… ${Math.round(j.elapsed / 1000)} s <span class="muted">(compte 1 à 2 min)</span></div>`;
+    body = `<div class="aistate"><span class="spin"></span> ${t('{p} analyse <b>{path}</b>… {s} s <span class="muted">(compte 1 à 2 min)</span>', { p: esc(AI_LABEL[j.provider] || j.provider), path: esc(pretty(j.target)), s: Math.round(j.elapsed / 1000) })}</div>`;
   } else if (j.status === 'error') {
     const auth = /authenticat|login|logged|expired|401|unauthorized/i.test(j.error);
-    body = `<div class="aierr"><b>L’analyse a échoué.</b> <span class="muted small">${esc(j.error.slice(0, 400))}</span>
-      ${auth ? `<p>Ton compte ${esc(AI_LABEL[j.provider])} n’est pas connecté.</p>${connectBlock(j.provider)}` : ''}</div>`;
+    body = `<div class="aierr"><b>${t('L’analyse a échoué.')}</b> <span class="muted small">${esc(j.error.slice(0, 400))}</span>
+      ${auth ? `<p>${t('Ton compte {p} n’est pas connecté.', { p: esc(AI_LABEL[j.provider]) })}</p>${connectBlock(j.provider)}` : ''}</div>`;
   } else if (j.status === 'done') {
     const items = j.result.items;
     const safe = items.filter(x => x.risk === 'safe' && x.action === 'trash');
     body = `<p class="aisum">${esc(j.result.summary)}</p>
-      <div class="aibar"><span class="muted small">${esc(labels[j.provider])} · ${esc(pretty(j.target))} · ${Math.round(j.elapsed / 1000)} s · ${items.length} suggestion${items.length > 1 ? 's' : ''}</span>
-      <span class="grow"></span>${safe.length ? `<button class="btn ghost sm" data-selsafe>Sélectionner les ${safe.length} « sans risque » (${fmtSize(safe.reduce((a, b) => a + b.size, 0))})</button>` : ''}</div>
+      <div class="aibar"><span class="muted small">${esc(AI_LABEL[j.provider] || j.provider)} · ${esc(pretty(j.target))} · ${Math.round(j.elapsed / 1000)} s · ${tn(items.length, '{n} suggestion', '{n} suggestions')}</span>
+      <span class="grow"></span>${safe.length ? `<button class="btn ghost sm" data-selsafe>${t('Sélectionner les {n} « sans risque » ({size})', { n: safe.length, size: fmtSize(safe.reduce((a, b) => a + b.size, 0)) })}</button>` : ''}</div>
       <div class="sitems">${items.map(it => sugItem(it, {
         noSel: it.action === 'command' || it.protected,
         extra: `<div class="sreason">${riskBadge(it.risk)} ${esc(it.reason)}</div>` +
-          (it.command ? `<div class="scmd"><code>${esc(it.command)}</code><button class="btn ghost sm" data-copy="${esc(it.command)}">Copier</button></div>` : ''),
-      })).join('') || '<p class="muted">Aucune suggestion exploitable.</p>'}</div>`;
+          (it.command ? `<div class="scmd"><code>${esc(it.command)}</code><button class="btn ghost sm" data-copy="${esc(it.command)}">${t('Copier')}</button></div>` : ''),
+      })).join('') || `<p class="muted">${t('Aucune suggestion exploitable.')}</p>`}</div>`;
   } else {
-    body = !anyReady() ? `<p class="muted small">Connecte ton abonnement Claude ou ChatGPT pour obtenir une liste triée de ce que tu peux supprimer, avec le niveau de risque. L’IA ne voit que les noms, tailles et dates — jamais le contenu de tes fichiers.</p>${connectBlock()}` : `<p class="muted small">L’IA voit les noms, tailles et dates des éléments les plus lourds — <b>jamais le contenu de tes fichiers</b> — et propose quoi supprimer, avec le niveau de risque. Rien n’est supprimé sans toi.</p>`;
+    body = !anyReady() ? `<p class="muted small">${t('Connecte ton abonnement Claude ou ChatGPT pour obtenir une liste triée de ce que tu peux supprimer, avec le niveau de risque. L’IA ne voit que les noms, tailles et dates — jamais le contenu de tes fichiers.')}</p>${connectBlock()}` : `<p class="muted small">${t('L’IA voit les noms, tailles et dates des éléments les plus lourds — <b>jamais le contenu de tes fichiers</b> — et propose quoi supprimer, avec le niveau de risque. Rien n’est supprimé sans toi.')}</p>`;
   }
-  $('#aiPanel').innerHTML = `<div class="aihead"><h2 class="stitle">Analyse IA</h2><span class="grow"></span>
+  $('#aiPanel').innerHTML = `<div class="aihead"><h2 class="stitle">${t('Analyse IA')}</h2><span class="grow"></span>
       ${anyReady() ? `<select id="aiProv"${running ? ' disabled' : ''}>${opts}</select>
-      <button class="btn ghost sm" data-accounts>Comptes</button>
-      <button class="btn primary sm" id="aiStart"${running ? ' disabled' : ''}>${j.status === 'done' ? 'Relancer' : 'Analyser ce dossier'}</button>`
+      <button class="btn ghost sm" data-accounts>${t('Comptes')}</button>
+      <button class="btn primary sm" id="aiStart"${running ? ' disabled' : ''}>${j.status === 'done' ? t('Relancer') : t('Analyser ce dossier')}</button>`
       : ''}</div>${body}`;
   clearTimeout(aiTimer);
   if (running && S.tab === 'suggest') aiTimer = setTimeout(refreshAI, 1500);
@@ -421,7 +423,7 @@ async function refreshAI() {
     const st = await get('/api/ai');
     if (S.tab !== 'suggest') return;
     renderAI(st);
-    if (prev === 'running' && st.job.status === 'done') toast(`Analyse IA terminée : ${st.job.result.items.length} suggestions`, 'ok');
+    if (prev === 'running' && st.job.status === 'done') toast(t('Analyse IA terminée : {n} suggestions', { n: st.job.result.items.length }), 'ok');
   } catch (e) { toast(esc(e.message), 'err'); }
 }
 
@@ -431,7 +433,7 @@ function selectItems(items) {
   renderRules(RULES); if (AI) renderAI(AI);
 }
 
-// ---------- Sélection & corbeille ----------
+// ---------- Selection & Trash ----------
 function toggleSel(i, force) {
   const r = S.view[i]; if (!r) return;
   const on = force ?? !S.sel.has(r.id);
@@ -442,14 +444,14 @@ function toggleSel(i, force) {
 }
 function selItems() {
   const all = [...S.sel.values()];
-  return all.filter(a => !all.some(b => b !== a && a.path.startsWith(b.path + '/')));
+  return all.filter(a => !all.some(b => b !== a && a.path.startsWith(b.path + SEP)));
 }
 function updateSelBar() {
   const items = selItems();
   $('#selbar').hidden = !items.length;
   document.body.classList.toggle('has-sel', items.length > 0);
   const total = items.reduce((a, b) => a + b.size, 0);
-  $('#selText').innerHTML = `<b>${items.length}</b> élément${items.length > 1 ? 's' : ''} sélectionné${items.length > 1 ? 's' : ''} · <b>${fmtSize(total)}</b>`;
+  $('#selText').innerHTML = tn(items.length, '<b>{n}</b> élément sélectionné · <b>{size}</b>', '<b>{n}</b> éléments sélectionnés · <b>{size}</b>', { size: fmtSize(total) });
 }
 
 let pendingTrash = null;
@@ -460,7 +462,7 @@ function askTrash() {
   items.sort((a, b) => b.size - a.size);
   pendingTrash = items;
   const total = items.reduce((a, b) => a + b.size, 0);
-  $('#mTitle').textContent = `Mettre ${items.length > 1 ? items.length + ' éléments' : '« ' + items[0].name + ' »'} à la corbeille ? (${fmtSize(total)})`;
+  $('#mTitle').textContent = items.length > 1 ? t('Mettre {n} éléments à la corbeille ? ({size})', { n: items.length, size: fmtSize(total) }) : t('Mettre « {name} » à la corbeille ? ({size})', { name: items[0].name, size: fmtSize(total) });
   $('#mList').innerHTML = items.map(it => `<div><code title="${esc(it.path)}">&lrm;${esc(pretty(it.path))}&lrm;</code><b>${fmtSize(it.size)}</b></div>`).join('');
   $('#modal').hidden = false;
   $('#mOk').focus();
@@ -473,7 +475,7 @@ async function doTrash() {
   try {
     const r = await post('/api/trash', { items: items.map(i => ({ id: i.id, path: i.path })) });
     for (const d of r.done) S.sel.delete(d.id);
-    if (r.done.length) toast(`✓ ${r.done.length} élément${r.done.length > 1 ? 's' : ''} à la corbeille · <b>${fmtSize(r.freed)}</b><br><span class="muted small">Vide la Corbeille pour vraiment libérer l’espace.</span>`, 'ok', 7000);
+    if (r.done.length) toast(`${tn(r.done.length, '✓ {n} élément à la corbeille · <b>{size}</b>', '✓ {n} éléments à la corbeille · <b>{size}</b>', { size: fmtSize(r.freed) })}<br><span class="muted small">${t('Vide la Corbeille pour vraiment libérer l’espace.')}</span>`, 'ok', 7000);
     for (const f of r.failed) toast(`✗ ${esc(pretty(f.path))}<br><span class="muted small">${esc(f.error)}</span>`, 'err', 9000);
   } catch (e) { toast(esc(e.message), 'err'); }
   $('#mOk').disabled = false;
@@ -492,18 +494,18 @@ async function action(a, r) {
 }
 function openRow(r) { if (r.dir && !r.skip) action('go', r); else action('open', r); }
 
-// ---------- Chat IA contextuel ----------
+// ---------- Contextual AI chat ----------
 let chatOpen = lsGet('taupe.chatOpen') !== '0';
-let CHAT = (() => { try { return JSON.parse(lsGet('taupe.chat') || '[]').map(m => m.pending ? { ...m, pending: false, error: true, content: 'Interrompu.' } : m); } catch { return []; } })();
+let CHAT = (() => { try { return JSON.parse(lsGet('taupe.chat') || '[]').map(m => m.pending ? { ...m, pending: false, error: true, content: t('Interrompu.') } : m); } catch { return []; } })();
 let chatBusy = false, chatTimer = null;
 const CHAT_IDEAS = ['Qu’est-ce qui prend le plus de place ici ?', 'Trouve tous les node_modules et sélectionne-les',
   'Montre-moi mes plus gros fichiers', 'Supprime les vieux installeurs .dmg', 'C’est quoi ces dossiers ?'];
 const saveChat = () => lsSet('taupe.chat', JSON.stringify(CHAT.slice(-40)));
 
-// Mini-markdown : blocs de code, `code` (→ liens cliquables si chemin connu), **gras**, listes, titres
+// Mini-markdown: code blocks, `code` (→ clickable links if the path is known), **bold**, lists, headings
 function mdLite(text, links = []) {
   const L = new Map(links.map(l => [l.text, l]));
-  const link = (raw, l) => `<a class="plink" data-id="${l.id}" data-parent="${l.parent}" data-dir="${l.dir ? 1 : 0}" title="Ouvrir dans Taupe · ${fmtSize(l.size)}">${esc(pretty(raw))}</a>`;
+  const link = (raw, l) => `<a class="plink" data-id="${l.id}" data-parent="${l.parent}" data-dir="${l.dir ? 1 : 0}" title="${t('Ouvrir dans Taupe · {size}', { size: fmtSize(l.size) })}">${esc(pretty(raw))}</a>`;
   const inline = s => s.split(/`([^`\n]+)`/).map((p, i) => {
     if (i % 2) return L.has(p) ? link(p, L.get(p)) : `<code>${esc(p)}</code>`;
     let h = esc(p);
@@ -520,11 +522,11 @@ function renderChat() {
   const box = $('#chatMsgs');
   if (!CHAT.length && !chatBusy) {
     box.innerHTML = PROVS && !Object.values(PROVS).some(ready)
-      ? `<div class="onboard"><b>Connecte ton IA</b>
-          <p>Pose des questions sur tes dossiers avec ton abonnement Claude ou ChatGPT. Pas de clé API, pas de frais en plus.</p>
+      ? `<div class="onboard"><b>${t('Connecte ton IA')}</b>
+          <p>${t('Pose des questions sur tes dossiers avec ton abonnement Claude ou ChatGPT. Pas de clé API, pas de frais en plus.')}</p>
           ${connectBlock()}</div>`
-      : `<div class="chatempty"><p>Demande-moi d’explorer, de trouver ou de faire le ménage dans le dossier affiché. Je vois les noms, tailles et dates — pas le contenu de tes fichiers — et je te demande toujours avant de supprimer.</p>
-          ${CHAT_IDEAS.map(q => `<button class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
+      : `<div class="chatempty"><p>${t('Demande-moi d’explorer, de trouver ou de faire le ménage dans le dossier affiché. Je vois les noms, tailles et dates — pas le contenu de tes fichiers — et je te demande toujours avant de supprimer.')}</p>
+          ${CHAT_IDEAS.map(q => t(q)).map(q => `<button class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
     return;
   }
   const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
@@ -533,33 +535,33 @@ function renderChat() {
     : `<div class="msg bot${m.error ? ' err' : ''}">
         ${m.events?.length ? `<div class="acts">${m.events.map(e => renderAct(e, m)).join('')}</div>` : ''}
         ${m.pending && !m.events?.some(e => e.status === 'running' || e.status === 'pending' || e.status === 'trashing')
-          ? `<div class="act running think"><i class="dot"></i><span class="lbl">${m.events?.length ? 'Réfléchit…' : 'Lit le dossier et réfléchit…'}</span></div>` : ''}
+          ? `<div class="act running think"><i class="dot"></i><span class="lbl">${m.events?.length ? t('Réfléchit…') : t('Lit le dossier et réfléchit…')}</span></div>` : ''}
         ${m.pending ? '' : m.error ? esc(m.content) : mdLite(m.content || '', m.links)}
         ${m.pending ? '' : `<div class="msgmeta">${esc(AI_LABEL[m.provider] || m.provider || '')}${m.ms ? ` · ${Math.round(m.ms / 1000)} s` : ''}${m.ctx ? ` · <span title="${esc(m.ctx)}">${esc(short(m.ctx))}</span>` : ''}</div>`}
       </div>`).join('');
   for (const c of box.querySelectorAll('.tcard[data-card]')) updateTrashCard(c);
   if (stick) box.scrollTop = box.scrollHeight;
 }
-const AI_LABEL = { claude: 'Claude', codex: 'ChatGPT', demo: 'Démo' };
+const AI_LABEL = { claude: 'Claude', codex: 'ChatGPT', demo: t('Démo') };
 
-// Une action de l'IA, animée tant qu'elle est en cours
-const q = s => `« ${esc(s)} »`;
-// Chemin court lisible (2 derniers segments), chemin complet au survol
+// An AI action, animated while it is in progress
+const q = s => (LANG === 'fr' ? `« ${esc(s)} »` : `“${esc(s)}”`);
+// Short readable path (last 2 segments), full path on hover
 const short = p => { const parts = String(p).split(SEP).filter(Boolean); return (parts.length > 2 ? '…' + SEP : (p.startsWith(SEP) ? SEP : '')) + parts.slice(-2).join(SEP); };
 const where = p => `<span class="ap" title="${esc(p)}">${esc(short(p))}</span>`;
 const relTo = (base, p) => (base && p.startsWith(base.endsWith(SEP) ? base : base + SEP) ? p.slice(base.length).replace(/^[\\/]/, '') : short(p));
-const TRASH_OFF = new Map(); // éléments décochés dans une carte de confirmation (clé chat:événement)
+const TRASH_OFF = new Map(); // items unchecked in a confirmation card (key chat:event)
 function renderAct(e, m) {
   const run = e.status === 'running', k = `act ${e.type} ${run ? 'running' : e.status}`;
   const line = (label, extra = '') => `<div class="${k}"><i class="dot"></i><span class="lbl">${label}</span>${extra}</div>`;
   const rel = p => relTo(m.ctx, p);
   const top = e.top?.length ? `<div class="asub">${e.top.map(p => esc(rel(p))).join(' · ')}</div>` : '';
   switch (e.type) {
-    case 'search': return line(run ? `Recherche ${q(e.query)} dans ${where(e.folder)}…` : `Recherche ${q(e.query)} — ${e.count} résultat${e.count > 1 ? 's' : ''}`, run ? '<div class="scanbar"></div>' : top);
-    case 'big': return line(run ? `Repère les plus gros fichiers de ${where(e.folder)}…` : `Plus gros fichiers de ${where(e.folder)}`, run ? '<div class="scanbar"></div>' : top);
-    case 'list': return line(run ? `Ouvre et lit ${where(e.path)}…` : `Lit ${where(e.path)} — ${e.count} éléments`, run ? '<div class="scanbar"></div>' : '');
-    case 'open': return line(`Affiche ${where(e.path)}`);
-    case 'select': return line(`Sélectionne ${e.items.length} élément${e.items.length > 1 ? 's' : ''} · ${fmtSize(e.total)}`,
+    case 'search': return line(run ? t('Recherche {q} dans {where}…', { q: q(e.query), where: where(e.folder) }) : tn(e.count, 'Recherche {q} — {n} résultat', 'Recherche {q} — {n} résultats', { q: q(e.query) }), run ? '<div class="scanbar"></div>' : top);
+    case 'big': return line(run ? t('Repère les plus gros fichiers de {where}…', { where: where(e.folder) }) : t('Plus gros fichiers de {where}', { where: where(e.folder) }), run ? '<div class="scanbar"></div>' : top);
+    case 'list': return line(run ? t('Ouvre et lit {where}…', { where: where(e.path) }) : t('Lit {where} — {n} éléments', { where: where(e.path), n: e.count }), run ? '<div class="scanbar"></div>' : '');
+    case 'open': return line(t('Affiche {where}', { where: where(e.path) }));
+    case 'select': return line(tn(e.items.length, 'Sélectionne {n} élément · {size}', 'Sélectionne {n} éléments · {size}', { size: fmtSize(e.total) }),
       `<div class="asub">${e.items.slice(0, 4).map(x => esc(rel(x.path))).join(' · ')}${e.items.length > 4 ? ` · +${e.items.length - 4}` : ''}</div>`);
     case 'trash': {
       if (e.status === 'pending') {
@@ -569,20 +571,20 @@ function renderAct(e, m) {
         return `<div class="act trash pending"><div class="tcard" data-card="${key}">
           <div class="thead2"><b class="tcount"></b><b class="tsize"></b></div>
           ${e.reason ? `<p class="treason">${esc(e.reason)}</p>` : ''}
-          ${e.items.length > 1 ? `<div class="ttools"><button class="linkbtn" data-tall="${key}" data-on="1">Tout cocher</button><button class="linkbtn" data-tall="${key}" data-on="0">Tout décocher</button></div>` : ''}
+          ${e.items.length > 1 ? `<div class="ttools"><button class="linkbtn" data-tall="${key}" data-on="1">${t('Tout cocher')}</button><button class="linkbtn" data-tall="${key}" data-on="0">${t('Tout décocher')}</button></div>` : ''}
           <div class="tlist">${rows}</div>
           <div class="tbtns"><button class="btn danger sm tgo" data-confirm="${e.i}" data-chat="${m.chat}" data-accept="1"></button>
-          <button class="btn sm" data-confirm="${e.i}" data-chat="${m.chat}" data-accept="0">Non</button></div></div></div>`;
+          <button class="btn sm" data-confirm="${e.i}" data-chat="${m.chat}" data-accept="0">${t('Non')}</button></div></div></div>`;
       }
-      if (e.status === 'trashing') return line(`Met ${e.items.length} élément${e.items.length > 1 ? 's' : ''} à la corbeille…`, '<div class="scanbar"></div>');
-      if (e.status === 'done') return line(`${e.done} élément${e.done > 1 ? 's' : ''} à la corbeille · <b class="freed">${fmtSize(e.freed)}</b> libérés${e.kept?.length ? ` · ${e.kept.length} gardé${e.kept.length > 1 ? 's' : ''}` : ''}${e.failed?.length ? ` · ${e.failed.length} échec(s)` : ''}`);
-      return line(e.status === 'refused' ? 'Suppression refusée' : 'Suppression non confirmée');
+      if (e.status === 'trashing') return line(tn(e.chosen ?? e.items.length, 'Met {n} élément à la corbeille…', 'Met {n} éléments à la corbeille…'), '<div class="scanbar"></div>');
+      if (e.status === 'done') return line(`${tn(e.done, '{n} élément à la corbeille', '{n} éléments à la corbeille')} · ${t('<b class="freed">{size}</b> libérés', { size: fmtSize(e.freed) })}${e.kept?.length ? ` · ${tn(e.kept.length, '{n} gardé', '{n} gardés')}` : ''}${e.failed?.length ? ` · ${t('{n} échec(s)', { n: e.failed.length })}` : ''}`);
+      return line(e.status === 'refused' ? t('Suppression refusée') : t('Suppression non confirmée'));
     }
   }
   return '';
 }
 
-// Effets d'une action sur l'interface (une seule fois, au moment où elle arrive ou se termine)
+// Effects of an action on the UI (only once, when it arrives or finishes)
 function applyAct(e, prev) {
   if (e.type === 'open' && !prev) {
     if (S.tab !== 'content') setTabSilently('content');
@@ -597,17 +599,17 @@ function applyAct(e, prev) {
   if (e.type === 'trash' && e.status === 'done' && prev?.status !== 'done') {
     for (const x of e.items) S.sel.delete(x.id);
     updateSelBar(); load();
-    toast(`${e.done} élément${e.done > 1 ? 's' : ''} à la corbeille · <b>${fmtSize(e.freed)}</b> libérés`, 'ok');
+    toast(`${tn(e.done, '{n} élément à la corbeille', '{n} éléments à la corbeille')} · <b>${t('{size} libérés', { size: fmtSize(e.freed) })}</b>`, 'ok');
   }
 }
 function updateTrashCard(card) {
   const boxes = [...card.querySelectorAll('input[data-tpick]')], on = boxes.filter(b => b.checked);
   const sizes = new Map(); for (const m of CHAT) for (const e of m.events || []) if (e.type === 'trash') for (const x of e.items) sizes.set(x.path, x.size);
   const total = on.reduce((t, b) => t + (sizes.get(b.dataset.path) || 0), 0);
-  card.querySelector('.tcount').textContent = boxes.length > 1 ? `Mettre à la corbeille ${on.length} sur ${boxes.length} éléments ?` : 'Mettre cet élément à la corbeille ?';
+  card.querySelector('.tcount').textContent = boxes.length > 1 ? t('Mettre à la corbeille {on} sur {n} éléments ?', { on: on.length, n: boxes.length }) : t('Mettre cet élément à la corbeille ?');
   card.querySelector('.tsize').textContent = fmtSize(total);
   const go = card.querySelector('.tgo');
-  go.textContent = on.length > 1 ? `Mettre ${on.length} éléments à la corbeille` : 'Mettre à la corbeille';
+  go.textContent = on.length > 1 ? t('Mettre {n} éléments à la corbeille', { n: on.length }) : t('Mettre à la corbeille');
   go.disabled = !on.length;
 }
 const flash = el => { if (!el) return; el.classList.remove('ai-flash'); void el.offsetWidth; el.classList.add('ai-flash'); };
@@ -626,7 +628,7 @@ async function sendChat(text) {
   setBusy(true); $('#chatInput').value = '';
   renderChat();
   try {
-    const r = await post('/api/chat/start', { id: S.cur, provider, selection: selItems().map(i => i.path),
+    const r = await post('/api/chat/start', { id: S.cur, provider, lang: LANG, selection: selItems().map(i => i.path),
       messages: [...history, { role: 'user', content: text }] });
     msg.chat = r.chat;
     pollChat(msg);
@@ -645,18 +647,18 @@ function endChat(msg, r) {
   clearTimeout(chatPoll);
   msg.pending = false; msg.ms = r.ms;
   if (r.status === 'done') Object.assign(msg, { content: r.answer, links: r.links });
-  else if (r.status === 'cancelled') Object.assign(msg, { content: 'Arrêté.', cancelled: true });
+  else if (r.status === 'cancelled') Object.assign(msg, { content: t('Arrêté.'), cancelled: true });
   else {
     const auth = /authenticat|login|logged|expired|401|unauthorized/i.test(r.error || '');
-    Object.assign(msg, { error: true, content: (r.error || 'Erreur inconnue').slice(0, 400) +
-      (auth ? '\n\nTon compte n’est pas connecté : clique sur « Comptes » en haut de l’assistant.' : '') });
+    Object.assign(msg, { error: true, content: (r.error || t('Erreur inconnue')).slice(0, 400) +
+      (auth ? '\n\n' + t('Ton compte n’est pas connecté : clique sur « Comptes » en haut de l’assistant.') : '') });
   }
   setBusy(false); saveChat(); renderChat();
   $('#chatInput').focus();
 }
 function setBusy(on) {
   chatBusy = on;
-  $('#chatSend').textContent = on ? 'Arrêter' : 'Envoyer';
+  $('#chatSend').textContent = on ? t('Arrêter') : t('Envoyer');
   $('#chatSend').classList.toggle('stop', on);
   $('#chatInput').disabled = on || !anyReady();
 }
@@ -671,9 +673,9 @@ function openLink(a) {
   if (a.dataset.dir === '1') navigate(id); else navigate(parent, id);
 }
 
-// ---------- Comptes IA (Claude / ChatGPT) : connexion en un clic ----------
+// ---------- AI accounts (Claude / ChatGPT): one-click login ----------
 let PROVS = null, LOGIN = null, loginTimer = null, lastSig = '';
-const NAME = { claude: 'Claude', codex: 'ChatGPT', demo: 'Démo' };
+const NAME = { claude: 'Claude', codex: 'ChatGPT', demo: t('Démo') };
 const ready = p => !!(p && p.installed && p.loggedIn);
 const anyReady = () => !!PROVS && Object.values(PROVS).some(ready);
 function providerOptions() {
@@ -684,22 +686,22 @@ function providerOptions() {
     `<option value="${k}"${k === pick ? ' selected' : ''}>${esc(AI_LABEL[k])}</option>`).join('');
 }
 
-// Bloc de connexion réutilisé (assistant, suggestions, fenêtre Comptes)
+// Shared login block (assistant, suggestions, Accounts window)
 function connectBlock(only) {
   const L = LOGIN?.status === 'running' ? LOGIN : null;
   if (L && (!only || only === L.provider)) {
-    if (L.phase !== 'login') return `<div class="cx"><p class="cx-wait"><span class="spin"></span><span>Installation de l’outil ${NAME[L.provider]} officiel… <span class="muted">environ 1 min</span></span></p>
-      <button class="linkbtn" data-cancel-login>Annuler</button></div>`;
-    return `<div class="cx"><p class="cx-wait"><span class="spin"></span><span>Connecte-toi dans la page ${NAME[L.provider]} qui vient de s’ouvrir.</span></p>
-      ${L.needsCode ? `<p class="muted small">Copie le code affiché à la fin : il est validé automatiquement dès que tu reviens ici.</p>
-        <div class="cx-code"><input id="loginCode" placeholder="ou colle le code ici" autocomplete="off" spellcheck="false"><button class="btn sm" data-code-submit>Valider</button></div>` : ''}
-      <p class="small">${L.url ? `<button class="linkbtn" data-ext="${esc(L.url)}">Rouvrir la page</button> · ` : ''}<button class="linkbtn" data-cancel-login>Annuler</button></p></div>`;
+    if (L.phase !== 'login') return `<div class="cx"><p class="cx-wait"><span class="spin"></span><span>${t('Installation de l’outil {p} officiel…', { p: NAME[L.provider] })} <span class="muted">${t('environ 1 min')}</span></span></p>
+      <button class="linkbtn" data-cancel-login>${t('Annuler')}</button></div>`;
+    return `<div class="cx"><p class="cx-wait"><span class="spin"></span><span>${t('Connecte-toi dans la page {p} qui vient de s’ouvrir.', { p: NAME[L.provider] })}</span></p>
+      ${L.needsCode ? `<p class="muted small">${t('Copie le code affiché à la fin : il est validé automatiquement dès que tu reviens ici.')}</p>
+        <div class="cx-code"><input id="loginCode" placeholder="${t('ou colle le code ici')}" autocomplete="off" spellcheck="false"><button class="btn sm" data-code-submit>${t('Valider')}</button></div>` : ''}
+      <p class="small">${L.url ? `<button class="linkbtn" data-ext="${esc(L.url)}">${t('Rouvrir la page')}</button> · ` : ''}<button class="linkbtn" data-cancel-login>${t('Annuler')}</button></p></div>`;
   }
   const failed = LOGIN && ['error'].includes(LOGIN.status) && (!only || only === LOGIN.provider)
-    ? `<p class="small cx-err">La connexion à ${NAME[LOGIN.provider]} a échoué. ${esc(stripLast(LOGIN.output))}</p>` : '';
+    ? `<p class="small cx-err">${t('La connexion à {p} a échoué.', { p: NAME[LOGIN.provider] })} ${esc(stripLast(LOGIN.output))}</p>` : '';
   const ks = (only ? [only] : ['claude', 'codex']).filter(k => !ready(PROVS?.[k]));
   return `<div class="cx">${failed}<div class="cx-btns">${ks.map((k, i) =>
-    `<button class="btn ${i === 0 ? 'primary' : ''} sm" data-connect="${k}">Continuer avec ${NAME[k]}</button>`).join('')}</div></div>`;
+    `<button class="btn ${i === 0 ? 'primary' : ''} sm" data-connect="${k}">${t('Continuer avec {p}', { p: NAME[k] })}</button>`).join('')}</div></div>`;
 }
 const stripLast = t => (t || '').split('\n').map(x => x.trim()).filter(Boolean).pop() || '';
 
@@ -710,18 +712,18 @@ async function loadProviders(refresh) {
     const sig = JSON.stringify([st.providers, st.login && { ...st.login, output: '' }]);
     const changed = sig !== lastSig; lastSig = sig;
     PROVS = st.providers; LOGIN = st.login;
-    if (wasRunning && LOGIN?.status === 'done') { toast(`Compte ${esc(NAME[LOGIN.provider])} connecté`, 'ok'); return loadProviders(true); }
+    if (wasRunning && LOGIN?.status === 'done') { toast(t('Compte {p} connecté', { p: esc(NAME[LOGIN.provider]) }), 'ok'); return loadProviders(true); }
     const any = anyReady();
     $('#chatProv').innerHTML = providerOptions();
-    // Connecter un autre compte sans quitter l'assistant (« + ChatGPT » quand Claude est déjà connecté, etc.)
+    // Connect another account without leaving the assistant ("+ ChatGPT" when Claude is already connected, etc.)
     const others = any ? Object.keys(PROVS).filter(k => !ready(PROVS[k]) && NAME[k]) : [];
     const busyLogin = LOGIN?.status === 'running' && others.includes(LOGIN.provider);
-    $('#chatAdd').innerHTML = busyLogin ? '' : others.map(k => `<button type="button" class="linkbtn" data-connect="${k}" title="Connecter aussi ton compte ${NAME[k]}">+ ${NAME[k]}</button>`).join('');
+    $('#chatAdd').innerHTML = busyLogin ? '' : others.map(k => `<button type="button" class="linkbtn" data-connect="${k}" title="${t('Connecter aussi ton compte {p}', { p: NAME[k] })}">+ ${NAME[k]}</button>`).join('');
     const cx = any && (busyLogin || (LOGIN?.status === 'error' && others.includes(LOGIN.provider)));
     $('#chatConnect').hidden = !cx;
     if (cx && document.activeElement?.id !== 'loginCode') $('#chatConnect').innerHTML = connectBlock(LOGIN.provider);
     $('#chatInput').disabled = !any || chatBusy; $('#chatSend').disabled = !any; $('#chatProv').hidden = !any;
-    $('#chatInput').placeholder = any ? 'Pose une question sur ce dossier… (Entrée pour envoyer)' : 'Connecte un compte IA pour discuter';
+    $('#chatInput').placeholder = any ? t('Pose une question sur ce dossier… (Entrée pour envoyer)') : t('Connecte un compte IA pour discuter');
     const typing = document.activeElement?.id === 'loginCode';
     if (changed && !typing) {
       if (!chatBusy) renderChat();
@@ -739,9 +741,9 @@ function renderAccounts() {
   if (document.activeElement?.id === 'loginCode') return;
   $('#aiAccounts').innerHTML = Object.keys(PROVS || {}).map(k => {
     const p = PROVS[k];
-    const state = !p.installed ? 'Non installé' : p.loggedIn ? 'Connecté' : 'Non connecté';
+    const state = !p.installed ? t('Non installé') : p.loggedIn ? t('Connecté') : t('Non connecté');
     const body = ready(p)
-      ? `<p class="small muted">${esc(p.detail || 'Prêt')}</p><button class="linkbtn" data-logout="${k}">Se déconnecter</button>`
+      ? `<p class="small muted">${esc(t(p.detail || 'Prêt'))}</p><button class="linkbtn" data-logout="${k}">${t('Se déconnecter')}</button>`
       : connectBlock(k);
     return `<div class="acct"><div class="accthead"><b>${NAME[k]}</b><span class="muted small">${state}</span></div>${body}</div>`;
   }).join('');
@@ -752,9 +754,9 @@ function closeAccounts() { $('#aiModal').hidden = true; }
 async function submitCode(code) {
   code = (code || '').trim();
   if (!code) return;
-  try { await post('/api/ai/login/code', { code }); toast('Code envoyé, connexion en cours…', '', 2500); loadProviders(); } catch (e) { toast(esc(e.message), 'err'); }
+  try { await post('/api/ai/login/code', { code }); toast(t('Code envoyé, connexion en cours…'), '', 2500); loadProviders(); } catch (e) { toast(esc(e.message), 'err'); }
 }
-// Claude affiche un code à recopier : dès qu'on revient dans Taupe, on le lit dans le presse-papiers.
+// Claude shows a code to copy: as soon as the user returns to Taupe, read it from the clipboard.
 let lastClip = '';
 window.addEventListener('focus', async () => {
   if (LOGIN?.status !== 'running' || LOGIN.phase !== 'login' || !LOGIN.needsCode) return;
@@ -835,27 +837,27 @@ async function poll(once) {
   let scanning = false;
   try {
     const st = await get('/api/status');
-    if (serverDown) { serverDown = false; toast('Reconnecté', 'ok'); }
+    if (serverDown) { serverDown = false; toast(t('Reconnecté'), 'ok'); }
     S.status = st; HOME = st.home; renderVol(st.volume);
     const sc = st.scan; scanning = !!sc?.scanning;
     if (st.root) S.root = st.root;
     $('#progress').hidden = !scanning;
     if (scanning) {
-      $('#progText').innerHTML = `Analyse de <b>${esc(pretty(sc.target))}</b> — <b>${nf.format(sc.files)}</b> fichiers · <b>${fmtSize(st.root?.size || 0)}</b> · ${(sc.elapsed / 1000).toFixed(0)} s · <span>${esc(pretty(sc.current))}</span>`;
+      $('#progText').innerHTML = t('Analyse de <b>{path}</b> — <b>{n}</b> fichiers · <b>{size}</b> · {s} s · <span>{cur}</span>', { path: esc(pretty(sc.target)), n: nf.format(sc.files), size: fmtSize(st.root?.size || 0), s: (sc.elapsed / 1000).toFixed(0), cur: esc(pretty(sc.current)) });
       if (++tick % 3 === 0 && !S.loading && S.cur != null && S.tab === 'content') load();
     }
     if (S.wasScanning && !scanning && sc) {
-      if (!sc.cancelled) toast(`✓ Analyse terminée : <b>${nf.format(sc.files)}</b> fichiers en ${(sc.elapsed / 1000).toFixed(1)} s`, 'ok');
+      if (!sc.cancelled) toast(t('✓ Analyse terminée : <b>{n}</b> fichiers en {s} s', { n: nf.format(sc.files), s: dec((sc.elapsed / 1000).toFixed(1)) }), 'ok');
       load();
     }
     S.wasScanning = scanning;
   } catch (e) {
-    if (!serverDown) { serverDown = true; toast('Serveur injoignable — relance <code>start.command</code>', 'err', 8000); }
+    if (!serverDown) { serverDown = true; toast(t('Le moteur ne répond plus — relance Taupe'), 'err', 8000); }
   }
   if (!once || scanning) pollTimer = setTimeout(poll, scanning ? 700 : 3000);
 }
 
-// ---------- Événements ----------
+// ---------- Events ----------
 $('#scanForm').addEventListener('submit', e => { e.preventDefault(); startScan($('#pathInput').value || '~'); });
 $('#cards').addEventListener('click', e => { const c = e.target.closest('.card'); if (!c) return; c.dataset.pick ? pickFolder() : startScan(c.dataset.path); });
 $('#pickBtn').addEventListener('click', () => pickFolder());
@@ -863,19 +865,20 @@ async function pickFolder() {
   if (!IS_APP) return $('#pathInput').focus();
   try { const r = await post('/api/pick'); if (r.path) { $('#pathInput').value = pretty(r.path); startScan(r.path); } } catch (e) { toast(esc(e.message), 'err'); }
 }
-const HINT = IS_MAC ? `Pour tout voir (Mail, Messages, Photos…), donne l’<b>Accès complet au disque</b> à ${IS_APP ? 'Taupe' : 'ton Terminal'} : Réglages Système → Confidentialité et sécurité → Accès complet au disque.`
-  : IS_WIN ? 'Certains dossiers système demandent les droits administrateur : clic droit sur Taupe → <b>Exécuter en tant qu’administrateur</b> pour tout voir.' : '';
+const HINT = IS_MAC ? t('Pour tout voir (Mail, Messages, Photos…), donne l’<b>Accès complet au disque</b> à {app} : Réglages Système → Confidentialité et sécurité → Accès complet au disque.', { app: IS_APP ? 'Taupe' : t('ton Terminal') })
+  : IS_WIN ? t('Certains dossiers système demandent les droits administrateur : clic droit sur Taupe → <b>Exécuter en tant qu’administrateur</b> pour tout voir.') : '';
 function renderWelcome(st) {
   const cards = (st.places || []).map(p => `<button class="card" data-path="${esc(p.path)}"><b>${esc(p.label)}</b><small>${esc(p.hint)}</small></button>`);
-  if (IS_APP) cards.push('<button class="card" data-pick="1"><b>Choisir un dossier…</b><small>' + MOD + 'O</small></button>');
+  if (IS_APP) cards.push(`<button class="card" data-pick="1"><b>${t('Choisir un dossier…')}</b><small>${MOD}O</small></button>`);
   $('#cards').innerHTML = cards.join('');
   $('#hint').innerHTML = HINT;
 }
 function applyPlatformLabels() {
   for (const el of document.querySelectorAll('[data-icon]')) el.insertAdjacentHTML('afterbegin', svg(el.dataset.icon));
-  $('#finderBtn').textContent = FM; $('#finderBtn').title = `Ouvrir dans le ${FM}`;
-  $('#trashBtn').innerHTML = `Mettre à la corbeille <kbd>${TRASH_KEY}</kbd>`;
-  $('.keyhint').textContent = `↑↓ naviguer · → ouvrir · ← remonter · Espace aperçu · ${IS_MAC ? '⌘' : 'Ctrl'}/⇧clic sélection · ${TRASH_KEY} corbeille`;
+  applyI18n();
+  $('#finderBtn').textContent = FM; $('#finderBtn').title = t('Ouvrir dans le {fm}', { fm: FM });
+  $('#trashBtn').innerHTML = `${t('Mettre à la corbeille')} <kbd>${TRASH_KEY}</kbd>`;
+  $('.keyhint').textContent = t('↑↓ naviguer · → ouvrir · ← remonter · Espace aperçu · {mod}/⇧clic sélection · {del} corbeille', { mod: IS_MAC ? '⌘' : 'Ctrl', del: TRASH_KEY });
   $('#pickBtn').hidden = !IS_APP;
 }
 window.taupe = { pick: pickFolder, rescan: () => !$('#app').hidden && $('#rescanBtn').click(), toggleChat: () => $('#chatToggle').click() };
@@ -913,7 +916,7 @@ $('#list').addEventListener('click', e => {
 });
 $('#list').addEventListener('dblclick', e => { const row = e.target.closest('.row'); if (row && !e.target.closest('button,input')) openRow(S.view[+row.dataset.i]); });
 
-// Treemap : clic, survol
+// Treemap: click, hover
 const tip = $('#tip');
 $('#tm').addEventListener('click', e => {
   const c = e.target.closest('[data-id]'); if (!c) return;
@@ -925,7 +928,7 @@ $('#tm').addEventListener('click', e => {
 $('#tm').addEventListener('mousemove', e => {
   const c = e.target.closest('[data-id]'); const it = c && S.tmIndex.get(+c.dataset.id);
   if (!it) { tip.hidden = true; return; }
-  tip.innerHTML = `<b>${esc(it.name)}</b> — ${fmtSize(it.size)} <span class="muted">(${fmtPct(pct(it.size, S.data.node.size))})</span><small>${it.dir ? 'Clic pour ouvrir' : 'Fichier'}</small>`;
+  tip.innerHTML = `<b>${esc(it.name)}</b> — ${fmtSize(it.size)} <span class="muted">(${fmtPct(pct(it.size, S.data.node.size))})</span><small>${it.dir ? t('Clic pour ouvrir') : t('Fichier')}</small>`;
   tip.hidden = false;
   const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8), y = Math.min(e.clientY + 14, innerHeight - tip.offsetHeight - 8);
   tip.style.left = x + 'px'; tip.style.top = y + 'px';
@@ -937,10 +940,10 @@ $('#suggestView').addEventListener('click', async e => {
   const t = e.target;
   if (t.id === 'aiStart') {
     const provider = $('#aiProv').value; lsSet('taupe.ai', provider);
-    try { await post('/api/ai/start', { id: S.cur, provider }); } catch (err) { return toast(esc(err.message), 'err'); }
+    try { await post('/api/ai/start', { id: S.cur, provider, lang: LANG }); } catch (err) { return toast(esc(err.message), 'err'); }
     return refreshAI();
   }
-  if (t.dataset.copy != null) { navigator.clipboard.writeText(t.dataset.copy).then(() => toast('Commande copiée', 'ok', 2000)); return; }
+  if (t.dataset.copy != null) { navigator.clipboard.writeText(t.dataset.copy).then(() => toast(t('Commande copiée'), 'ok', 2000)); return; }
   if (t.hasAttribute('data-selsafe')) return selectItems(AI.job.result.items.filter(x => x.risk === 'safe' && x.action === 'trash'));
   const grp = t.closest('.sgroup');
   if (t.hasAttribute('data-more') && grp) { const k = grp.dataset.key; expanded.has(k) ? expanded.delete(k) : expanded.add(k); return renderRules(RULES); }
@@ -996,7 +999,7 @@ document.addEventListener('keydown', e => {
   else if (k === 'Home' || k === 'End') { e.preventDefault(); setFocus(k === 'Home' ? 0 : S.view.length - 1); }
 });
 
-// ---------- Démarrage ----------
+// ---------- Startup ----------
 (async () => {
   applyPlatformLabels();
   initChat();

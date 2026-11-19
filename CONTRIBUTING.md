@@ -1,30 +1,30 @@
-# Contribuer à Taupe
+# Contributing to Taupe
 
-Merci de ton intérêt ! Quelques règles simples :
+Thanks for your interest! A few simple rules:
 
 ## Branches
 
-- `main` : uniquement des versions publiées (chaque merge = une release taguée).
-- `develop` : branche d'intégration. **Les PR visent `develop`.**
-- `feat/nom-court`, `fix/nom-court` : une branche par sujet, créée depuis `develop`.
+- `main`: published releases only (every merge = a tagged release).
+- `develop`: integration branch. **Pull requests target `develop`.**
+- `feat/short-name`, `fix/short-name`: one branch per topic, created from `develop`.
 
-## Avant d'ouvrir une PR
+## Before opening a PR
 
 ```bash
 npm install
 npm run check
 npm test
-npm start   # vérifie à la main dans l'application
+npm start   # check manually in the app
 ```
 
-- Garde le moteur (`src/`) **sans dépendance** : uniquement des modules Node intégrés.
-- Tout ce qui dépend du système va dans `src/platform.mjs` ou `electron/main.mjs`.
-- Ajoute une ligne dans `CHANGELOG.md`, section « Non publié ».
-- Messages de commit **en anglais**, au format [Conventional Commits](https://www.conventionalcommits.org/) :
-  `type(scope): description` à l'impératif, en minuscules, sans point final.
-  Types : `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`.
-  Exemples : `feat(ai): add one-click account connection`, `fix(scanner): skip APFS firmlinks`.
+- Keep the engine (`src/`) **dependency-free**: built-in Node modules only.
+- Anything OS-specific goes in `src/platform.mjs` or `electron/main.mjs`.
+- Add a line to `CHANGELOG.md`, under "Unreleased".
+- Commit messages **in English**, following [Conventional Commits](https://www.conventionalcommits.org/):
+  `type(scope): description` in the imperative mood, lowercase, no trailing period.
+  Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`.
+  Examples: `feat(ai): add one-click account connection`, `fix(scanner): skip APFS firmlinks`.
 
-## Sécurité
+## Security
 
-Rien ne doit pouvoir supprimer un fichier sans confirmation explicite de l'utilisateur. Les suppressions passent toujours par la Corbeille, et l'API locale reste protégée (127.0.0.1, jeton, vérification du chemin). Voir [SECURITY.md](SECURITY.md).
+Nothing should ever be able to delete a file without the user's explicit confirmation. Deletions always go through the Trash / Recycle Bin, and the local API stays protected (127.0.0.1, token, path check). See [SECURITY.md](SECURITY.md).

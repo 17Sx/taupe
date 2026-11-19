@@ -1,27 +1,27 @@
 name: 🐛 Bug
-description: Quelque chose ne marche pas comme prévu
+description: Something doesn't work as expected
 labels: [bug]
 body:
   - type: textarea
     id: what
     attributes:
-      label: Que se passe-t-il ?
-      description: Ce que tu as fait, ce que tu attendais, ce qui s'est passé.
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
     validations: { required: true }
   - type: input
     id: version
     attributes:
-      label: Version de Taupe
+      label: Taupe version
       placeholder: "1.0.0"
     validations: { required: true }
   - type: dropdown
     id: os
     attributes:
-      label: Système
+      label: Operating system
       options: [macOS (Apple Silicon), macOS (Intel), Windows 11, Windows 10, Linux]
     validations: { required: true }
   - type: textarea
     id: logs
     attributes:
-      label: Messages d'erreur / captures
-      description: Ne colle jamais d'informations personnelles (chemins privés, e-mails…).
+      label: Error messages / screenshots
+      description: Never paste personal information (private paths, email addresses…).

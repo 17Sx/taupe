@@ -1,8 +1,8 @@
-// Serveur MCP (stdio, JSON-RPC 2.0) lancé par Claude Code ou Codex pendant une conversation.
-// Il expose les outils de Taupe à l'IA et relaie chaque appel au moteur local (src/server.mjs),
-// qui exécute l'action et l'affiche en direct dans l'assistant. Zéro dépendance.
+// MCP server (stdio, JSON-RPC 2.0) launched by Claude Code or Codex during a conversation.
+// It exposes Taupe's tools to the AI and relays each call to the local engine (src/server.mjs),
+// which runs the action and shows it live in the assistant. Zero dependencies.
 //
-// Variables d'environnement : TAUPE_URL (http://127.0.0.1:port/), TAUPE_TOKEN, TAUPE_CHAT (id de conversation).
+// Environment variables: TAUPE_URL (http://127.0.0.1:port/), TAUPE_TOKEN, TAUPE_CHAT (conversation id).
 import readline from 'node:readline';
 
 const { TAUPE_URL, TAUPE_TOKEN, TAUPE_CHAT } = process.env;
@@ -84,7 +84,7 @@ async function handle(msg) {
       }
     }
     default:
-      if (method?.startsWith('notifications/')) return; // pas de réponse aux notifications
+      if (method?.startsWith('notifications/')) return; // no response to notifications
       return fail(-32601, `Méthode inconnue : ${method}`);
   }
 }
