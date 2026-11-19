@@ -104,9 +104,10 @@ function spawnCli(bin, args, opts) {
   return spawn(bin, args, { ...opts, windowsHide: true });
 }
 
-function runProc(bin, args, input, cwd, timeoutMs) {
+function runProc(bin, args, input, cwd, timeoutMs, onProc) {
   return new Promise((resolve, reject) => {
     const p = spawnCli(bin, args, { cwd, env: childEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
+    onProc?.(p);
     let out = '', err = '';
     const t = setTimeout(() => { p.kill(); reject(new Error(`Délai dépassé (${timeoutMs / 1000} s)`)); }, timeoutMs);
     p.stdout.on('data', d => (out += d));
@@ -158,19 +159,51 @@ async function call(provider, input, { schema = null, fast = false, timeoutMs = 
 
 export const analyze = (provider, digest) => call(provider, PROMPT + digest, { schema: SCHEMA });
 
-const CHAT_PROMPT = `Tu es l'assistant intégré à Taupe, un explorateur d'espace disque sur le Mac de l'utilisateur (un développeur).
+const CHAT_PROMPT = `Tu es l'assistant intégré à Taupe, un explorateur d'espace disque sur l'ordinateur de l'utilisateur (un développeur).
 - Réponds en français, de façon concise et concrète : phrases courtes, listes, tailles chiffrées.
-- Appuie-toi sur le CONTEXTE ci-dessous : la structure du disque (noms, tailles, dates). Tu ne vois PAS le contenu des fichiers ; ne l'invente pas.
-- Quand tu cites un fichier ou un dossier, écris son chemin ABSOLU complet entre backticks, ex. \`/Users/x/projet/node_modules\` : il devient cliquable dans Taupe.
-- Tu ne peux rien supprimer toi-même : l'utilisateur coche les éléments dans Taupe puis « Mettre à la corbeille ». Dis-le si on te demande de supprimer.
-- Si l'info n'est pas dans le contexte (dossier non détaillé), dis-le et propose d'ouvrir ce dossier dans Taupe pour que tu le voies.
-- Signale clairement les risques (données perso, projets actifs, travail non commité). Commandes shell dans des blocs de code.
+- Tu vois la STRUCTURE du disque (noms, tailles, dates), jamais le contenu des fichiers : ne l'invente pas.
+- Tu peux AGIR dans Taupe avec les outils « taupe » :
+  search_files (chercher par nom), list_folder (voir un dossier), big_files (plus gros fichiers),
+  open_folder (montrer un dossier à l'utilisateur), select_items (cocher des éléments),
+  move_to_trash (proposer de mettre à la Corbeille).
+- Utilise ces outils dès que c'est utile : pour chercher, vérifier un dossier absent du contexte, montrer, sélectionner ou supprimer.
+- move_to_trash affiche une demande de confirmation et attend la réponse de l'utilisateur : c'est la SEULE façon de supprimer.
+  N'utilise jamais de commande shell ni aucun autre outil pour lire, déplacer ou supprimer des fichiers.
+- Ne propose jamais de supprimer des données personnelles sans le signaler clairement (photos, documents, projets actifs, travail non commité).
+- Quand tu cites un fichier ou un dossier, écris son chemin ABSOLU entre backticks, ex. \`/Users/x/projet/node_modules\` : il devient cliquable.
+- Après des actions, résume en une ou deux phrases ce que tu as fait.
 `;
+const TOOL_NAMES = ['search_files', 'list_folder', 'big_files', 'open_folder', 'select_items', 'move_to_trash'];
 
-export function chat(provider, context, messages) {
+// Conversation « agent » : la CLI de l'IA lance notre serveur MCP (src/mcp.mjs) et n'a accès qu'à ses outils.
+export async function chatAgent(provider, context, messages, mcp, onProc) {
+  const bin = await findBin(provider);
+  if (!bin) throw new Error(`CLI « ${provider} » introuvable. Connecte ton compte d’abord.`);
   const convo = messages.slice(-12).map(m => `${m.role === 'user' ? 'Utilisateur' : 'Assistant'} : ${String(m.content).slice(0, 4000)}`).join('\n\n');
-  return call(provider, `${CHAT_PROMPT}\n=== CONTEXTE ===\n${context}\n\n=== CONVERSATION ===\n${convo}\n\nRéponds au dernier message de l'utilisateur.`,
-    { fast: true, timeoutMs: 180000 });
+  const input = `${CHAT_PROMPT}\n=== CONTEXTE (dossier affiché) ===\n${context}\n\n=== CONVERSATION ===\n${convo}\n\nRéponds au dernier message de l'utilisateur.`;
+  const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'taupe-chat-'));
+  try {
+    if (provider === 'claude') {
+      const cfg = path.join(tmp, 'mcp.json');
+      await fsp.writeFile(cfg, JSON.stringify({ mcpServers: { taupe: { type: 'stdio', command: mcp.command, args: mcp.args, env: mcp.env } } }));
+      const args = ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--strict-mcp-config', '--mcp-config', cfg,
+        '--allowedTools', ...TOOL_NAMES.map(t => `mcp__taupe__${t}`)];
+      const res = JSON.parse(await runProc(bin, args, input, tmp, 600000, onProc));
+      if (res.is_error) throw new Error(String(res.result || 'Erreur Claude'));
+      return String(res.result || '').trim();
+    }
+    const out = path.join(tmp, 'out.txt');
+    const tomlEnv = '{' + Object.entries(mcp.env).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(',') + '}';
+    const args = ['exec', '--skip-git-repo-check', '--ephemeral', '-s', 'read-only', '-o', out,
+      '-c', 'model_reasoning_effort="low"', '-c', 'approval_policy="never"',
+      '-c', `mcp_servers.taupe.command=${JSON.stringify(mcp.command)}`,
+      '-c', `mcp_servers.taupe.args=${JSON.stringify(mcp.args)}`,
+      '-c', `mcp_servers.taupe.env=${tomlEnv}`];
+    await runProc(bin, args, input, tmp, 600000, onProc);
+    return (await fsp.readFile(out, 'utf8')).trim();
+  } finally {
+    fsp.rm(tmp, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 // ---------- Comptes : statut, connexion, déconnexion ----------

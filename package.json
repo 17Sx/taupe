@@ -29,7 +29,7 @@
     "start": "electron .",
     "dev:web": "node src/server.mjs",
     "check": "node scripts/check.mjs",
-    "test": "node scripts/smoke.mjs",
+    "test": "node scripts/smoke.mjs && node scripts/mcp-test.mjs",
     "icons": "electron scripts/make-icon.mjs",
     "dist": "electron-builder --publish never",
     "dist:mac": "electron-builder --mac --publish never",
@@ -125,6 +125,9 @@
       ],
       "category": "Utility",
       "icon": "build/icon.png"
-    }
+    },
+    "asarUnpack": [
+      "src/mcp.mjs"
+    ]
   }
 }
