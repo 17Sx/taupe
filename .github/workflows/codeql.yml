@@ -36,11 +36,13 @@ jobs:
           category: /language:javascript-typescript
           upload: never
           output: sarif
+      # Reviewed false positives (rule + file, with the reason) live in .github/codeql-accepted.json
       - name: Fail on CodeQL alerts
         run: |
-          jq -r '.runs[].results[] | "::error file=\(.locations[0].physicalLocation.artifactLocation.uri),line=\(.locations[0].physicalLocation.region.startLine)::\(.ruleId): \(.message.text | split("\n")[0])"' sarif/*.sarif
-          count=$(jq '[.runs[].results[]] | length' sarif/*.sarif | paste -sd+ - | bc)
-          echo "CodeQL alerts: $count"
+          filter='[.runs[].results[] | . as $r | select(($accepted[0] | map(select(.rule == $r.ruleId and .file == $r.locations[0].physicalLocation.artifactLocation.uri)) | length) == 0)]'
+          jq -r --slurpfile accepted .github/codeql-accepted.json "$filter"' | .[] | "::error file=\(.locations[0].physicalLocation.artifactLocation.uri),line=\(.locations[0].physicalLocation.region.startLine)::\(.ruleId): \(.message.text | split("\n")[0])"' sarif/*.sarif
+          count=$(jq --slurpfile accepted .github/codeql-accepted.json "$filter | length" sarif/*.sarif | paste -sd+ - | bc)
+          echo "CodeQL alerts (not accepted): $count"
           test "$count" -eq 0
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
