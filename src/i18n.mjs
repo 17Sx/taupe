@@ -23,6 +23,7 @@ const EN = {
   'Route inconnue': 'Unknown route', 'Méthode refusée': 'Method not allowed',
   'Chemin protégé (système ou dossier principal)': 'Protected path (system or main folder)',
   'Non déplacé': 'Not moved',
+  'Données d’application : confirmation renforcée requise': 'App data: reinforced confirmation required',
   'L’élément a changé depuis l’affichage — recharge': 'The item changed since it was displayed — reload',
 
   // Suggestions (rules)
@@ -90,6 +91,7 @@ const EN = {
   'Installation échouée (code {p})': 'Installation failed (code {p})',
   'Délai dépassé ({p} s)': 'Timed out ({p} s)',
   'Réponse IA illisible': 'Unreadable AI response',
+  'Codex est trop ancien pour qu’on lui retire son shell. Mets-le à jour : npm install -g @openai/codex': 'Codex is too old for Taupe to remove its shell. Update it: npm install -g @openai/codex',
 };
 
 export function tr(lang, s, v) {

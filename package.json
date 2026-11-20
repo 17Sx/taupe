@@ -28,8 +28,9 @@
   "scripts": {
     "start": "electron .",
     "dev:web": "node src/server.mjs",
-    "check": "node scripts/check.mjs",
-    "test": "node scripts/smoke.mjs && node scripts/mcp-test.mjs",
+    "check": "node scripts/check.mjs && eslint . && tsc -p tsconfig.json && tsc -p tsconfig.ui.json",
+    "lint": "eslint .",
+    "test": "node scripts/ai-args-test.mjs && node scripts/smoke.mjs && node scripts/mcp-test.mjs",
     "icons": "electron scripts/make-icon.mjs",
     "dist": "electron-builder --publish never",
     "dist:mac": "electron-builder --mac --publish never",
@@ -39,8 +40,13 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.5",
     "electron": "45.2.1",
-    "electron-builder": "26.18.0"
+    "electron-builder": "26.18.0",
+    "eslint": "10.15.0",
+    "globals": "17.14.0",
+    "typescript": "7.0.2"
   },
   "build": {
     "appId": "io.github.17sx.taupe",

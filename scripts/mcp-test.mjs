@@ -22,7 +22,7 @@ const html = await (await fetch(srv.url)).text();
 const token = html.match(/name="token" content="([^"]+)"/)[1];
 const api = async (method, p, body) => {
   const r = await fetch(srv.url + p, { method, headers: { 'x-token': token, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });
-  return r.json();
+  return /** @type {Promise<any>} */ (r.json());
 };
 await api('POST', 'api/scan', { path: tmp });
 for (let i = 0; i < 100; i++) { const s = await api('GET', 'api/status'); if (!s.scan.scanning) break; await new Promise(r => setTimeout(r, 30)); }
@@ -96,6 +96,12 @@ try {
   await step('chemin protégé refusé', async () => {
     const r = await tool('move_to_trash', { paths: [os.homedir()], reason: 'test' });
     assert.equal(r.trashed.length, 0);
+  });
+  await step('outils hérités refusés (constructor, __proto__…)', async () => {
+    for (const name of ['constructor', '__proto__', 'hasOwnProperty', 'toString']) {
+      const r = await fetch(srv.url + 'api/tool', { method: 'POST', headers: { 'x-token': token, 'content-type': 'application/json' }, body: JSON.stringify({ chat, name, args: {} }) });
+      assert.equal(r.status, 404, name);
+    }
   });
   await step('journal d’événements pour l’interface', async () => {
     const { events } = await api('GET', `api/chat/events?chat=${chat}`);
