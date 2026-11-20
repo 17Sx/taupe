@@ -6,25 +6,27 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: read
+# No rights by default; each job asks only for what it needs.
+# Third-party actions are pinned by commit SHA (Dependabot keeps them up to date).
+permissions: {}
 
 jobs:
   test:
     name: Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-    env:
-      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run check
-      - run: npm test
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json   # "packageManager" field
+      - run: bun install --frozen-lockfile
+      - run: bun run check   # ESLint (incl. syntax), tsc --checkJs
+      - run: bun run test

@@ -1,0 +1,7 @@
+[
+  {
+    "rule": "js/shell-command-injection-from-environment",
+    "file": "src/ai.mjs",
+    "reason": "On Windows, npm-installed AI CLIs are .cmd scripts that can only run through cmd.exe, so spawnCli builds a command line that contains Taupe's own install paths (process.execPath, mcp.mjs). Every argument is escaped for cmd.exe twice (cross-spawn's method, winQuote), and these paths come from Taupe's installation, not from outside input."
+  }
+]

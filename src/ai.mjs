@@ -11,6 +11,8 @@ import { tr } from './i18n.mjs';
 
 const HOME = os.homedir();
 export const PROVIDERS = { claude: 'Claude', codex: 'ChatGPT' };
+// Own keys only: "__proto__", "constructor"… must never pass as a provider
+export const isProvider = p => typeof p === 'string' && Object.hasOwn(PROVIDERS, p);
 
 const SCHEMA = {
   type: 'object', additionalProperties: false, required: ['summary', 'suggestions'],
@@ -35,6 +37,7 @@ const SCHEMA = {
 };
 
 const LANG_NAME = { fr: 'French', en: 'English' };
+const langName = l => (Object.hasOwn(LANG_NAME, l) ? LANG_NAME[l] : 'English');
 const analysisPrompt = lang => `You are a disk-cleanup expert helping a developer free up disk space on their computer.
 Below: the analysis of one of their folders (tree of the heaviest items, biggest files, candidates found by built-in rules).
 
@@ -50,7 +53,7 @@ Strict rules:
 - Also spot what the rules miss: duplicated projects (e.g. "project-dupes", "project copy"), old abandoned projects, forgotten exports/videos, archives already extracted, etc.
 - "title": short (≤ 8 words). "reason": 1–2 concrete sentences (why it can be deleted, how to get it back if needed).
 - "summary": 2–3 sentences on where the space goes and the total possible gain.
-- Write "title", "reason" and "summary" in ${LANG_NAME[lang] || 'English'}.
+- Write "title", "reason" and "summary" in ${langName(lang)}.
 
 Answer only with the requested JSON.
 
@@ -61,10 +64,12 @@ Answer only with the requested JSON.
 const IS_WIN = process.platform === 'win32';
 const binCache = new Map();
 async function findBin(name, fresh = false) {
+  if (!/^[a-z][a-z0-9_-]*$/i.test(name)) return null; // a program name, never a path or a shell fragment
   if (!fresh && binCache.has(name)) return binCache.get(name);
   const env = process.env;
   const dirs = IS_WIN
     ? [path.join(HOME, '.local', 'bin'), env.APPDATA && path.join(env.APPDATA, 'npm'), env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, 'Programs', name),
+      env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, 'Programs', 'OpenAI', 'Codex', 'bin'), // Codex standalone installer
       path.join(HOME, '.bun', 'bin'), ...(env.PATH || '').split(path.delimiter)]
     : [path.join(HOME, '.local/bin'), path.join(HOME, '.claude/local'), '/opt/homebrew/bin', '/usr/local/bin',
       path.join(HOME, '.bun/bin'), path.join(HOME, '.npm-global/bin'), ...(env.PATH || '').split(path.delimiter)];
@@ -74,10 +79,10 @@ async function findBin(name, fresh = false) {
     const p = path.join(d, n);
     try { fs.accessSync(p, IS_WIN ? fs.constants.F_OK : fs.constants.X_OK); if (fs.statSync(p).isFile()) { found = p; break outer; } } catch {}
   }
-  if (!found) { // last resort: ask the user's shell
+  if (!found) { // last resort: ask the user's shell (the name goes in as $1, never pasted into the script)
     found = await new Promise(res => IS_WIN
       ? execFile('where.exe', [name], { timeout: 6000 }, (e, out) => res(!e ? out.trim().split(/\r?\n/)[0] || null : null))
-      : execFile(process.env.SHELL || '/bin/zsh', ['-lic', `command -v ${name}`], { timeout: 6000 },
+      : execFile(process.env.SHELL || '/bin/zsh', ['-lic', 'command -v -- "$1"', 'taupe', name], { timeout: 6000 },
         (e, out) => res(!e && out.trim().startsWith('/') ? out.trim().split('\n').pop() : null)));
   }
   binCache.set(name, found);
@@ -134,6 +139,46 @@ function extractJson(text) {
   return JSON.parse(text.slice(a, b + 1));
 }
 
+// ---------- CLI arguments (pure functions, checked by scripts/ai-args-test.mjs) ----------
+// Codex: its built-in command tools are switched off, so the model can neither run a command nor
+// read a file; the read-only sandbox is only a second line of defence. `--disable` refuses an
+// unknown feature: on a Codex too old to know these flags the call fails instead of running with a shell.
+export const CODEX_LOCKDOWN = ['--disable', 'shell_tool', '--disable', 'unified_exec'];
+export const TOOL_NAMES = ['search_files', 'list_folder', 'big_files', 'open_folder', 'select_items', 'move_to_trash'];
+
+// One-shot analysis: no tools at all, structured JSON answer
+export function analysisArgs(provider, { schema = null, schemaFile = '', outFile = '', fast = false } = {}) {
+  if (provider === 'claude') {
+    const args = ['-p', '--output-format', 'json', '--tools', '', '--no-session-persistence', '--strict-mcp-config'];
+    if (schema) args.push('--json-schema', JSON.stringify(schema));
+    return args;
+  }
+  const args = ['exec', '--skip-git-repo-check', '--ephemeral', ...CODEX_LOCKDOWN, '-s', 'read-only', '-c', 'approval_policy="never"', '-o', outFile];
+  if (fast) args.push('-c', 'model_reasoning_effort="low"');
+  if (schemaFile) args.push('--output-schema', schemaFile);
+  return args;
+}
+
+// Agent conversation: Taupe's MCP tools and nothing else
+export function chatArgs(provider, { mcpConfigFile = '', mcp = null, outFile = '' } = {}) {
+  if (provider === 'claude') {
+    return ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--strict-mcp-config', '--mcp-config', mcpConfigFile,
+      '--allowedTools', ...TOOL_NAMES.map(t => `mcp__taupe__${t}`)];
+  }
+  const tomlEnv = '{' + Object.entries(mcp.env).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(',') + '}';
+  return ['exec', '--skip-git-repo-check', '--ephemeral', ...CODEX_LOCKDOWN, '-s', 'read-only', '-o', outFile,
+    '-c', 'model_reasoning_effort="low"', '-c', 'approval_policy="never"',
+    '-c', `mcp_servers.taupe.command=${JSON.stringify(mcp.command)}`,
+    '-c', `mcp_servers.taupe.args=${JSON.stringify(mcp.args)}`,
+    '-c', `mcp_servers.taupe.env=${tomlEnv}`];
+}
+
+// A Codex too old for CODEX_LOCKDOWN answers "Unknown feature flag": say how to fix it
+function codexError(e, lang) {
+  if (/unknown feature flag/i.test(e.message)) throw new Error(tr(lang, 'Codex est trop ancien pour qu’on lui retire son shell. Mets-le à jour avec son installeur officiel : {p}', { p: INSTALL.codex[IS_WIN ? 'win' : 'mac'] }));
+  throw e;
+}
+
 // Single CLI call, with no tools at all (read/write/shell disabled).
 // schema → structured JSON response; otherwise free text. fast → reduced reasoning (chat).
 async function call(provider, input, { schema = null, fast = false, timeoutMs = 300000, lang = 'en' } = {}) {
@@ -142,17 +187,14 @@ async function call(provider, input, { schema = null, fast = false, timeoutMs = 
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'taupe-ai-'));
   try {
     if (provider === 'claude') {
-      const args = ['-p', '--output-format', 'json', '--tools', '', '--no-session-persistence', '--strict-mcp-config'];
-      if (schema) args.push('--json-schema', JSON.stringify(schema));
-      const res = JSON.parse(await runProc(bin, args, input, tmp, timeoutMs, null, lang));
+      const res = JSON.parse(await runProc(bin, analysisArgs('claude', { schema }), input, tmp, timeoutMs, null, lang));
       if (res.is_error) throw new Error(String(res.result || 'Erreur Claude'));
       return schema ? extractJson(res.structured_output ?? res.result) : String(res.result || '').trim();
     }
     const outFile = path.join(tmp, 'out.txt');
-    const args = ['exec', '--skip-git-repo-check', '--ephemeral', '-s', 'read-only', '-o', outFile];
-    if (fast) args.push('-c', 'model_reasoning_effort="low"');
-    if (schema) { const f = path.join(tmp, 'schema.json'); await fsp.writeFile(f, JSON.stringify(schema)); args.push('--output-schema', f); }
-    await runProc(bin, args, input, tmp, timeoutMs, null, lang);
+    let schemaFile = '';
+    if (schema) { schemaFile = path.join(tmp, 'schema.json'); await fsp.writeFile(schemaFile, JSON.stringify(schema)); }
+    await runProc(bin, analysisArgs('codex', { schemaFile, outFile, fast }), input, tmp, timeoutMs, null, lang).catch(e => codexError(e, lang));
     const text = await fsp.readFile(outFile, 'utf8');
     return schema ? extractJson(text) : text.trim();
   } finally {
@@ -160,10 +202,13 @@ async function call(provider, input, { schema = null, fast = false, timeoutMs = 
   }
 }
 
-export const analyze = (provider, digest, lang = 'en') => call(provider, analysisPrompt(lang) + digest, { schema: SCHEMA, lang });
+export async function analyze(provider, digest, lang = 'en') {
+  if (!isProvider(provider)) throw new Error(tr(lang, 'Fournisseur inconnu'));
+  return call(provider, analysisPrompt(lang) + digest, { schema: SCHEMA, lang });
+}
 
 const chatPrompt = lang => `You are the assistant built into Taupe, a disk-space explorer running on the user's computer (the user is a developer).
-- Always answer in ${LANG_NAME[lang] || 'English'}, concisely and concretely: short sentences, lists, sizes with numbers.
+- Always answer in ${langName(lang)}, concisely and concretely: short sentences, lists, sizes with numbers.
 - You see the STRUCTURE of the disk (names, sizes, dates), never the contents of files: do not make them up.
 - You can ACT in Taupe with the "taupe" tools:
   search_files (search by name), list_folder (read a folder), big_files (biggest files),
@@ -176,10 +221,9 @@ const chatPrompt = lang => `You are the assistant built into Taupe, a disk-space
 - When you mention a file or folder, write its ABSOLUTE path between backticks, e.g. \`/Users/x/project/node_modules\`: it becomes clickable.
 - After taking actions, sum up what you did in one or two sentences.
 `;
-const TOOL_NAMES = ['search_files', 'list_folder', 'big_files', 'open_folder', 'select_items', 'move_to_trash'];
-
 // "Agent" conversation: the AI CLI launches our MCP server (src/mcp.mjs) and can only use its tools.
 export async function chatAgent(provider, context, messages, mcp, onProc, lang = 'en') {
+  if (!isProvider(provider)) throw new Error(tr(lang, 'Fournisseur inconnu'));
   const bin = await findBin(provider);
   if (!bin) throw new Error(tr(lang, 'CLI « {p} » introuvable. Connecte ton compte d’abord.', { p: provider }));
   const convo = messages.slice(-12).map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${String(m.content).slice(0, 4000)}`).join('\n\n');
@@ -189,20 +233,12 @@ export async function chatAgent(provider, context, messages, mcp, onProc, lang =
     if (provider === 'claude') {
       const cfg = path.join(tmp, 'mcp.json');
       await fsp.writeFile(cfg, JSON.stringify({ mcpServers: { taupe: { type: 'stdio', command: mcp.command, args: mcp.args, env: mcp.env } } }));
-      const args = ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--strict-mcp-config', '--mcp-config', cfg,
-        '--allowedTools', ...TOOL_NAMES.map(t => `mcp__taupe__${t}`)];
-      const res = JSON.parse(await runProc(bin, args, input, tmp, 600000, onProc, lang));
+      const res = JSON.parse(await runProc(bin, chatArgs('claude', { mcpConfigFile: cfg }), input, tmp, 600000, onProc, lang));
       if (res.is_error) throw new Error(String(res.result || 'Erreur Claude'));
       return String(res.result || '').trim();
     }
     const out = path.join(tmp, 'out.txt');
-    const tomlEnv = '{' + Object.entries(mcp.env).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(',') + '}';
-    const args = ['exec', '--skip-git-repo-check', '--ephemeral', '-s', 'read-only', '-o', out,
-      '-c', 'model_reasoning_effort="low"', '-c', 'approval_policy="never"',
-      '-c', `mcp_servers.taupe.command=${JSON.stringify(mcp.command)}`,
-      '-c', `mcp_servers.taupe.args=${JSON.stringify(mcp.args)}`,
-      '-c', `mcp_servers.taupe.env=${tomlEnv}`];
-    await runProc(bin, args, input, tmp, 600000, onProc, lang);
+    await runProc(bin, chatArgs('codex', { mcp, outFile: out }), input, tmp, 600000, onProc, lang).catch(e => codexError(e, lang));
     return (await fsp.readFile(out, 'utf8')).trim();
   } finally {
     fsp.rm(tmp, { recursive: true, force: true }).catch(() => {});
@@ -210,10 +246,13 @@ export async function chatAgent(provider, context, messages, mcp, onProc, lang =
 }
 
 // ---------- Accounts: status, login, logout ----------
+// Official standalone installers: they download the CLI itself (no npm, no Node.js needed).
+// mac = macOS / Linux shell, win = PowerShell.
 export const INSTALL = {
   claude: { mac: 'curl -fsSL https://claude.ai/install.sh | bash', win: 'irm https://claude.ai/install.ps1 | iex',
     docs: 'https://docs.claude.com/en/docs/claude-code/setup' },
-  codex: { mac: 'npm install -g @openai/codex', win: 'npm install -g @openai/codex', docs: 'https://github.com/openai/codex' },
+  codex: { mac: 'curl -fsSL https://chatgpt.com/codex/install.sh | sh', win: 'irm https://chatgpt.com/codex/install.ps1 | iex',
+    docs: 'https://github.com/openai/codex' },
 };
 const stripAnsi = s => s.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/\x1b\][^\x07]*\x07/g, '');
 
@@ -253,7 +292,7 @@ export function loginState() {
 // One-click login: installs the official tool if missing, then starts the login.
 // The state (phase install → login → done/error) is tracked by the UI via loginState().
 export function connect(provider, lang = 'en') {
-  if (!PROVIDERS[provider]) throw new Error(tr(lang, 'Fournisseur inconnu'));
+  if (!isProvider(provider)) throw new Error(tr(lang, 'Fournisseur inconnu'));
   loginCancel();
   const job = loginJob = { provider, status: 'running', phase: 'check', started: Date.now(), url: '', needsCode: false, output: '', proc: null };
   (async () => {
@@ -271,25 +310,23 @@ export function connect(provider, lang = 'en') {
   })().catch(e => { if (job.status === 'running') Object.assign(job, { status: 'error', output: job.output + '\n' + e.message }); statusAt = 0; });
 }
 
-// Official installers (Claude Code: Anthropic's script; Codex: npm, or Homebrew on Mac)
+// Official standalone installers (Anthropic's and OpenAI's scripts): nothing else to install first
+export function installerCommand(provider, win = IS_WIN) {
+  const line = INSTALL[provider][win ? 'win' : 'mac'];
+  return win
+    ? { cmd: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', line] }
+    : { cmd: '/bin/sh', args: ['-c', line] };
+}
 async function runInstaller(provider, job, lang = 'en') {
-  let cmd, args;
-  if (provider === 'claude') {
-    if (IS_WIN) { cmd = 'powershell.exe'; args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'irm https://claude.ai/install.ps1 | iex']; }
-    else { cmd = '/bin/bash'; args = ['-c', 'curl -fsSL https://claude.ai/install.sh | bash']; }
-  } else {
-    const npm = await findBin('npm', true);
-    const brew = !IS_WIN && await findBin('brew', true);
-    if (npm) { cmd = npm; args = ['install', '-g', '@openai/codex']; }
-    else if (brew) { cmd = brew; args = ['install', 'codex']; }
-    else throw new Error(tr(lang, 'Installer ChatGPT (Codex) nécessite Node.js : installe-le depuis nodejs.org puis réessaie.'));
-  }
-  await new Promise((resolve, reject) => {
-    const p = job.proc = spawnCli(cmd, args, { cwd: os.tmpdir(), env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
+  const { cmd, args } = installerCommand(provider);
+  // The Codex installer asks questions on the terminal ("Start Codex now?"…): always answer no
+  const env = { ...childEnv(), CODEX_NON_INTERACTIVE: '1' };
+  await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
+    const p = job.proc = spawnCli(cmd, args, { cwd: os.tmpdir(), env, stdio: ['ignore', 'pipe', 'pipe'] });
     p.stdout.on('data', d => (job.output += d)); p.stderr.on('data', d => (job.output += d));
     p.on('error', reject);
-    p.on('close', code => (code === 0 ? resolve() : reject(new Error(tr(lang, 'Installation échouée (code {p})', { p: code })))));
-  });
+    p.on('close', code => (code === 0 ? resolve(undefined) : reject(new Error(tr(lang, 'Installation échouée (code {p})', { p: code })))));
+  }));
 }
 
 function startLogin(bin, provider, job) {
@@ -317,6 +354,7 @@ export function loginCancel() {
 }
 
 export async function logout(provider) {
+  if (!isProvider(provider)) return;
   const bin = await findBin(provider);
   if (!bin) return;
   await runProc(bin, provider === 'claude' ? ['auth', 'logout'] : ['logout'], '', os.tmpdir(), 20000).catch(() => {});

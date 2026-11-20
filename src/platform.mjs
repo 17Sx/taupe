@@ -21,24 +21,61 @@ export const SKIP_DIRS = new Set((IS_WIN
 ).map(norm));
 export const isSkipped = p => SKIP_DIRS.has(norm(p));
 
-// Paths we always refuse to move to the Trash
+// ---------- Paths we always refuse to move to the Trash ----------
+// Compared after resolving symlinks in the parent folders (the item itself is what goes to the Trash:
+// a symlink leaves on its own, not its target) and without case on macOS and Windows, whose disks are
+// case-insensitive: "~/documents" or "~/link-to-home/Documents" are the same folder as "~/Documents".
+const fold = p => (IS_WIN || IS_MAC ? p.toLowerCase() : p);
 const H = (...p) => path.join(HOME, ...p);
-const PROTECTED_EXACT = new Set((IS_WIN
+// Each listed path also under its real name (/etc → /private/etc, a symlinked home folder…)
+const real = p => { try { return fs.realpathSync.native(p); } catch { return p; } };
+const withReal = list => [...new Set(list.flatMap(p => [p, real(p)]))];
+// Secrets (keys, credentials, tokens): never, nor anything inside
+const SECRETS = [
+  H('.ssh'), H('.gnupg'), H('.aws'), H('.azure'), H('.kube'), H('.docker'), H('.password-store'),
+  H('.config', 'gcloud'), H('.config', 'gh'), H('.netrc'), H('.git-credentials'), H('.npmrc'), H('.pypirc'),
+  ...(IS_MAC ? [H('Library', 'Keychains')] : []),
+  ...(IS_WIN ? [H('AppData', 'Roaming', 'Microsoft', 'Credentials'), H('AppData', 'Local', 'Microsoft', 'Credentials'),
+    H('AppData', 'Roaming', 'Microsoft', 'Protect'), H('AppData', 'Roaming', 'Microsoft', 'Crypto')] : []),
+];
+const PROTECTED_EXACT = new Set(withReal((IS_WIN
   ? ['C:\\Program Files', 'C:\\Program Files (x86)', 'C:\\ProgramData', 'C:\\Users', HOME, H('AppData'), H('AppData', 'Local'), H('AppData', 'Roaming'),
     H('Desktop'), H('Documents'), H('Downloads'), H('Pictures'), H('Music'), H('Videos'), H('OneDrive')]
   : ['/', HOME, '/Applications', '/Users', '/Library', '/private', '/etc', '/var', '/opt', '/cores', '/Volumes', '/home', '/root',
-    H('Library'), H('Desktop'), H('Documents'), H('Downloads'), H('Pictures'), H('Music'), H('Movies')]
-).map(norm));
-const PROTECTED_PREFIX = (IS_WIN
+    '/private/etc', '/private/var', H('Library'), H('Desktop'), H('Documents'), H('Downloads'), H('Pictures'), H('Music'), H('Movies')]
+).concat(SECRETS)).map(fold));
+const PROTECTED_PREFIX = withReal((IS_WIN
   ? ['C:\\Windows\\']
   : ['/System/', '/usr/', '/bin/', '/sbin/', '/boot/', '/proc/', '/sys/', '/dev/']
-).map(norm);
-export function isProtected(p) {
-  const n = norm(path.resolve(p));
+).map(x => x.replace(/[\\/]$/, '')).concat(SECRETS)).map(x => fold(x + path.sep));
+
+// Absolute path with the symlinks of its parent folders resolved (the last component is kept as is).
+// Resolves the deepest parent that exists: "<link to ~>/.kube/x" is "~/.kube/x" even without ~/.kube.
+function realParent(p) {
+  const abs = path.resolve(p);
+  const rest = [path.basename(abs)];
+  if (!rest[0]) return abs; // root of a disk
+  for (let dir = path.dirname(abs); ;) {
+    try { return path.join(fs.realpathSync.native(dir), ...rest); } catch {}
+    const up = path.dirname(dir);
+    if (up === dir) return abs;
+    rest.unshift(path.basename(dir)); dir = up;
+  }
+}
+function protectedAs(p) {
+  const n = fold(p);
   if (PROTECTED_EXACT.has(n)) return true;
   if (IS_WIN && /^[a-z]:\\?$/.test(n)) return true; // drive root
   return PROTECTED_PREFIX.some(x => n === x.replace(/[\\/]$/, '') || n.startsWith(x));
 }
+export const isProtected = p => protectedAs(path.resolve(p)) || protectedAs(realParent(p));
+
+// Allowed, but only after a reinforced confirmation: app data (settings, accounts, histories…)
+const SENSITIVE_PREFIX = withReal(IS_MAC ? [H('Library')] : IS_WIN ? [H('AppData')] : [H('.config'), H('.local', 'share')]).map(x => fold(x + path.sep));
+// …except the temporary folder: on Windows %TEMP% lives in AppData\Local\Temp, and it is safe to empty
+const TEMP = withReal([os.tmpdir()]).map(fold);
+const inTemp = f => TEMP.some(t => f === t || f.startsWith(t + path.sep));
+export const isSensitive = p => [path.resolve(p), realParent(p)].map(fold).some(f => SENSITIVE_PREFIX.some(s => f.startsWith(s)) && !inTemp(f));
 
 export function expand(p) {
   p = String(p ?? '').trim();
@@ -67,6 +104,17 @@ export function places(lang = 'en') {
     { path: H('Downloads'), icon: 'download', label: T('Téléchargements'), hint: '~/Downloads' },
   ];
 }
+
+// ---------- macOS Full Disk Access ----------
+// The privacy database itself is only readable with Full Disk Access: opening it tells whether Taupe
+// (the app that runs this engine) has it. true / false, or null when unknown or not macOS.
+export async function fullDiskAccess() {
+  if (!IS_MAC) return null;
+  try { await (await fs.promises.open(H('Library', 'Application Support', 'com.apple.TCC', 'TCC.db'), 'r')).close(); return true; }
+  catch (e) { return e.code === 'EPERM' || e.code === 'EACCES' ? false : null; }
+}
+// System Settings → Privacy & Security → Full Disk Access
+export const FULL_DISK_ACCESS_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles';
 
 // ---------- Fallback system actions (development mode without Electron) ----------
 // In the app, Electron provides its own native actions (shell.trashItem, etc.).
@@ -108,6 +156,7 @@ foreach ($p in ($env:TAUPE_PATHS | ConvertFrom-Json)) {
   },
   openExternal: url => (IS_MAC ? run('open', [url]) : IS_WIN ? run('cmd.exe', ['/c', 'start', '""', url]) : run('xdg-open', [url])),
   pickFolder: async () => null, // no native picker outside the app
+  openPrivacySettings: () => (IS_MAC ? run('open', [FULL_DISK_ACCESS_PANE]) : null),
 };
 // explorer.exe returns an error code even on success: ignore it.
 function explorer(arg) {

@@ -1,0 +1,17 @@
+{
+  // Type-checks the engine's JavaScript (no build, nothing emitted). The UI has its own config:
+  // tsconfig.ui.json (classic browser scripts, not modules). Both run in `bun run check`.
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "es2024",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["es2024"],
+    "types": ["node"],
+    "strict": false,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.mjs", "electron/**/*.mjs", "scripts/**/*.mjs", "*.mjs"]
+}

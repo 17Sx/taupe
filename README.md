@@ -69,7 +69,7 @@ Ask it, for example, "find all node_modules folders and select them" or "delete 
 - **open** a folder in Taupe and **check** items;
 - **propose moving items to the Trash**: a confirmation card appears where you can untick items, and nothing is deleted until you click.
 
-Every action shows up live in the assistant, with an animation. Under the hood, Taupe exposes these tools to Claude Code / Codex through a small local [MCP](https://modelcontextprotocol.io) server (`src/mcp.mjs`). The AI has no access to any other tool: no shell, no file reading.
+Every action shows up live in the assistant, with an animation. Under the hood, Taupe exposes these tools to Claude Code / Codex through a small local [MCP](https://modelcontextprotocol.io) server (`src/mcp.mjs`). The AI has no access to any other tool: no shell, no file reading (Claude Code's built-in tools and Codex's command tools are switched off, see [SECURITY.md](SECURITY.md)). ChatGPT needs a recent Codex CLI: the "Continue with ChatGPT" button installs it with OpenAI's official installer (no npm or Node.js needed).
 
 **Privacy**: the AI only receives **paths, sizes and dates**, never the contents of your files. It cannot delete anything on its own: you always check the items and confirm.
 
@@ -86,15 +86,15 @@ Every action shows up live in the assistant, with an animation. Under the hood, 
 
 ## Development
 
-Requires Node.js 20 or later.
+Requires [Bun](https://bun.com) 1.4 or later. Building the installers also needs Node.js 20+, because electron-builder runs on Node.
 
 ```bash
-npm install
-npm start            # run the app (Electron)
-npm test             # engine tests
-npm run check        # syntax check
-npm run dist:mac     # build the .dmg (on macOS)
-npm run dist:win     # build the .exe installer (on Windows)
+bun install
+bun start            # run the app (Electron)
+bun run test         # engine tests
+bun run check        # ESLint (incl. syntax), tsc --checkJs
+bun run dist:mac     # build the .dmg (on macOS)
+bun run dist:win     # build the .exe installer (on Windows)
 ```
 
 Architecture:

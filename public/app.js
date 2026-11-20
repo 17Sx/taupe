@@ -1,7 +1,10 @@
 'use strict';
-const TOKEN = document.querySelector('meta[name=token]').content;
+// Browser development mode only: in the app the page has no token, Electron adds the header itself
+const TOKEN = /** @type {HTMLMetaElement | null} */ (document.querySelector('meta[name=token]'))?.content || '';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Plain text of an HTML snippet, read by the browser's parser (an inert <template>: nothing runs or loads)
+const htmlText = h => { const tpl = document.createElement('template'); tpl.innerHTML = h; return tpl.content.textContent || ''; };
 const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const PLATFORM = document.body.dataset.platform || 'darwin', IS_APP = document.body.dataset.app === '1';
 const IS_WIN = PLATFORM === 'win32', IS_MAC = PLATFORM === 'darwin';
@@ -11,7 +14,8 @@ const TRASH_KEY = IS_MAC ? '⌘⌫' : t('Suppr'), MOD = IS_MAC ? '⌘' : 'Ctrl+'
 const joinPath = (a, b) => (b ? (a.endsWith(SEP) ? a + b : a + SEP + b) : a);
 
 async function api(method, url, body) {
-  const r = await fetch(url, { method, headers: { 'x-token': TOKEN, 'x-lang': LANG, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const headers = { 'x-lang': LANG, 'content-type': 'application/json', ...(TOKEN ? { 'x-token': TOKEN } : {}) };
+  const r = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || r.statusText);
   return j;
@@ -33,7 +37,7 @@ function fmtSize(b) {
 function relTime(sec) {
   if (!sec) return '';
   const d = sec - Date.now() / 1000, a = Math.abs(d);
-  for (const [u, s] of [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]])
+  for (const [u, s] of /** @type {[Intl.RelativeTimeFormatUnit, number][]} */ ([['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]]))
     if (a >= s) return rtf.format(Math.round(d / s), u);
   return t('à l’instant');
 }
@@ -70,6 +74,7 @@ const SVG = {
   gear: '<circle cx="8" cy="8" r="2"/><path d="M8 1.75v1.6M8 12.65v1.6M14.25 8h-1.6M3.35 8h-1.6M12.4 3.6l-1.15 1.15M4.75 11.25L3.6 12.4M12.4 12.4l-1.15-1.15M4.75 4.75L3.6 3.6"/>',
   reset: '<path d="M2.75 8a5.25 5.25 0 1 0 1.55-3.7"/><path d="M4.1 1.9v2.6h2.6"/>',
   close: '<path d="M4 4l8 8M12 4l-8 8"/>',
+  check: '<path d="M3.25 8.4l3 3 6.5-6.8"/>',
   sparkle: '<path d="M8 1.75l1.4 4.85L14.25 8 9.4 9.4 8 14.25 6.6 9.4 1.75 8 6.6 6.6z"/>',
   trash: '<path d="M2.75 4.25h10.5M6.25 4.25V2.75h3.5v1.5M4 4.25l.65 9.25h6.7L12 4.25"/>',
   search: '<circle cx="7" cy="7" r="4.25"/><path d="M10.25 10.25l3.5 3.5"/>',
@@ -123,7 +128,7 @@ function renderHeader() {
     meta += ` · <span title="${esc(t('Différence entre l’espace utilisé et ce qui est visible : système, snapshots APFS (Time Machine), espace purgeable, fichiers d’autres utilisateurs non lisibles.'))}">${t('volume utilisé : {x}', { x: fmtSize(used) })} ⓘ</span>`;
   }
   const errs = S.status?.scan?.errors;
-  if (errs) meta += ` · <span class="tag" title="${esc(t('Ces dossiers n’ont pas pu être lus (droits d’accès).') + ' ' + HINT.replace(/<[^>]+>/g, ''))}">${tn(errs, '⚠ {n} dossier inaccessible', '⚠ {n} dossiers inaccessibles')}</span>`;
+  if (errs) meta += ` · <span class="tag" title="${esc(t('Ces dossiers n’ont pas pu être lus (droits d’accès).') + ' ' + htmlText(HINT))}">${tn(errs, '⚠ {n} dossier inaccessible', '⚠ {n} dossiers inaccessibles')}</span>`;
   $('#curMeta').innerHTML = meta;
   $('#upBtn').disabled = d.crumbs.length < 2;
   $('#chatCtx').textContent = pretty(d.path);
@@ -236,9 +241,11 @@ function goUp() {
   if (c && c.length > 1) navigate(c[c.length - 2].id, S.cur);
 }
 
+// Highlights the button of the current tab
+const markTab = tab => { for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', /** @type {HTMLElement} */ (b).dataset.tab === tab); };
 function setTab(tab) {
   S.tab = tab;
-  for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === tab);
+  markTab(tab);
   S.sort = { k: 'size', d: -1 }; S.focus = -1; $('#list').scrollTop = 0;
   load();
 }
@@ -329,7 +336,7 @@ function renderTypes(t) {
   const total = S.data.node.size || 1;
   const maxC = t.categories[0]?.size || 1, maxE = t.extensions[0]?.size || 1;
   const cat = t.categories.map(c => {
-    const [e, col] = CAT_STYLE[c.key] || ['📄', '#888'];
+    const col = (CAT_STYLE[c.key] || ['📄', '#888'])[1];
     return `<div class="trow"><span class="tdot" style="background:${col}"></span><span>${esc(t(c.label))}</span><span class="bar"><i style="width:${pct(c.size, maxC)}%;background:${col}"></i></span><b>${fmtSize(c.size)}</b><span class="muted small r">${fmtPct(pct(c.size, total))}</span></div>`;
   }).join('');
   const ext = t.extensions.map(x =>
@@ -383,11 +390,11 @@ function renderRules(groups) {
 
 function renderAI(st) {
   AI = st;
-  const j = st.job, labels = st.labels;
+  const j = st.job;
   PROVS = st.providers;
   const running = j.status === 'running';
   const opts = providerOptions();
-  let body = '';
+  let body;
   if (running) {
     body = `<div class="aistate"><span class="spin"></span> ${t('{p} analyse <b>{path}</b>… {s} s <span class="muted">(compte 1 à 2 min)</span>', { p: esc(AI_LABEL[j.provider] || j.provider), path: esc(pretty(j.target)), s: Math.round(j.elapsed / 1000) })}</div>`;
   } else if (j.status === 'error') {
@@ -403,7 +410,7 @@ function renderAI(st) {
       <div class="sitems">${items.map(it => sugItem(it, {
         noSel: it.action === 'command' || it.protected,
         extra: `<div class="sreason">${riskBadge(it.risk)} ${esc(it.reason)}</div>` +
-          (it.command ? `<div class="scmd"><code>${esc(it.command)}</code><button class="btn ghost sm" data-copy="${esc(it.command)}">${t('Copier')}</button></div>` : ''),
+          (it.command ? `<div class="scmdwarn">${t('Commande proposée par l’IA : vérifie-la avant de l’exécuter.')}</div><div class="scmd"><code>${esc(it.command)}</code><button class="btn ghost sm" data-copy="${esc(it.command)}">${t('Copier')}</button></div>` : ''),
       })).join('') || `<p class="muted">${t('Aucune suggestion exploitable.')}</p>`}</div>`;
   } else {
     body = !anyReady() ? `<p class="muted small">${t('Connecte ton abonnement Claude ou ChatGPT pour obtenir une liste triée de ce que tu peux supprimer, avec le niveau de risque. L’IA ne voit que les noms, tailles et dates — jamais le contenu de tes fichiers.')}</p>${connectBlock()}` : `<p class="muted small">${t('L’IA voit les noms, tailles et dates des éléments les plus lourds — <b>jamais le contenu de tes fichiers</b> — et propose quoi supprimer, avec le niveau de risque. Rien n’est supprimé sans toi.')}</p>`;
@@ -454,27 +461,37 @@ function updateSelBar() {
   $('#selText').innerHTML = tn(items.length, '<b>{n}</b> élément sélectionné · <b>{size}</b>', '<b>{n}</b> éléments sélectionnés · <b>{size}</b>', { size: fmtSize(total) });
 }
 
-let pendingTrash = null;
+let pendingTrash = null, strongTrash = false;
 function askTrash() {
   let items = selItems();
   if (!items.length && S.focus >= 0) { const r = S.view[S.focus]; items = [{ id: r.id, path: rowPath(r), size: r.size, name: r.name, dir: r.dir, r }]; }
   if (!items.length) return;
   items.sort((a, b) => b.size - a.size);
-  pendingTrash = items;
+  openTrashModal(items, false);
+}
+// strong: app data (~/Library, AppData) refused by the engine without an explicit second confirmation
+function openTrashModal(items, strong) {
+  pendingTrash = items; strongTrash = strong;
   const total = items.reduce((a, b) => a + b.size, 0);
   $('#mTitle').textContent = items.length > 1 ? t('Mettre {n} éléments à la corbeille ? ({size})', { n: items.length, size: fmtSize(total) }) : t('Mettre « {name} » à la corbeille ? ({size})', { name: items[0].name, size: fmtSize(total) });
   $('#mList').innerHTML = items.map(it => `<div><code title="${esc(it.path)}">&lrm;${esc(pretty(it.path))}&lrm;</code><b>${fmtSize(it.size)}</b></div>`).join('');
+  $('#mWarn').hidden = $('#mStrong').hidden = !strong;
+  $('#mStrongOk').checked = false;
+  $('#mOk').disabled = strong;
   $('#modal').hidden = false;
-  $('#mOk').focus();
+  (strong ? $('#mStrongOk') : $('#mOk')).focus();
 }
 function closeModal() { $('#modal').hidden = true; pendingTrash = null; $('#list').focus({ preventScroll: true }); }
 
 async function doTrash() {
-  const items = pendingTrash; if (!items) return;
+  const items = pendingTrash, strong = strongTrash; if (!items || $('#mOk').disabled) return;
   $('#mOk').disabled = true;
+  let again = [];
   try {
-    const r = await post('/api/trash', { items: items.map(i => ({ id: i.id, path: i.path })) });
+    const r = await post('/api/trash', { items: items.map(i => ({ id: i.id, path: i.path })), confirmSensitive: strong ? items.map(i => i.path) : [] });
     for (const d of r.done) S.sel.delete(d.id);
+    again = r.failed.filter(f => f.needsConfirm);
+    r.failed = r.failed.filter(f => !f.needsConfirm);
     if (r.done.length) toast(`${tn(r.done.length, '✓ {n} élément à la corbeille · <b>{size}</b>', '✓ {n} éléments à la corbeille · <b>{size}</b>', { size: fmtSize(r.freed) })}<br><span class="muted small">${t('Vide la Corbeille pour vraiment libérer l’espace.')}</span>`, 'ok', 7000);
     for (const f of r.failed) toast(`✗ ${esc(pretty(f.path))}<br><span class="muted small">${esc(f.error)}</span>`, 'err', 9000);
   } catch (e) { toast(esc(e.message), 'err'); }
@@ -482,11 +499,12 @@ async function doTrash() {
   closeModal();
   updateSelBar();
   await load();
+  if (again.length) { const byPath = new Map(items.map(i => [i.path, i])); openTrashModal(again.map(f => byPath.get(f.path) || f), true); }
 }
 
 async function action(a, r) {
   try {
-    if (a === 'go') { if (S.tab !== 'content') { S.tab = 'content'; for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === 'content'); } return navigate(r.id); }
+    if (a === 'go') { if (S.tab !== 'content') { S.tab = 'content'; markTab('content'); } return navigate(r.id); }
     if (a === 'ql') return await post('/api/quicklook', { id: r.id });
     if (a === 'reveal') return await post('/api/reveal', { id: r.id });
     if (a === 'open') return await post('/api/open', { id: r.id });
@@ -497,7 +515,7 @@ function openRow(r) { if (r.dir && !r.skip) action('go', r); else action('open',
 // ---------- Contextual AI chat ----------
 let chatOpen = lsGet('taupe.chatOpen') !== '0';
 let CHAT = (() => { try { return JSON.parse(lsGet('taupe.chat') || '[]').map(m => m.pending ? { ...m, pending: false, error: true, content: t('Interrompu.') } : m); } catch { return []; } })();
-let chatBusy = false, chatTimer = null;
+let chatBusy = false;
 const CHAT_IDEAS = ['Qu’est-ce qui prend le plus de place ici ?', 'Trouve tous les node_modules et sélectionne-les',
   'Montre-moi mes plus gros fichiers', 'Supprime les vieux installeurs .dmg', 'C’est quoi ces dossiers ?'];
 const saveChat = () => lsSet('taupe.chat', JSON.stringify(CHAT.slice(-40)));
@@ -551,6 +569,7 @@ const short = p => { const parts = String(p).split(SEP).filter(Boolean); return 
 const where = p => `<span class="ap" title="${esc(p)}">${esc(short(p))}</span>`;
 const relTo = (base, p) => (base && p.startsWith(base.endsWith(SEP) ? base : base + SEP) ? p.slice(base.length).replace(/^[\\/]/, '') : short(p));
 const TRASH_OFF = new Map(); // items unchecked in a confirmation card (key chat:event)
+const TRASH_ACK = new Set(); // cards whose reinforced confirmation (app data) is ticked
 function renderAct(e, m) {
   const run = e.status === 'running', k = `act ${e.type} ${run ? 'running' : e.status}`;
   const line = (label, extra = '') => `<div class="${k}"><i class="dot"></i><span class="lbl">${label}</span>${extra}</div>`;
@@ -565,14 +584,17 @@ function renderAct(e, m) {
       `<div class="asub">${e.items.slice(0, 4).map(x => esc(rel(x.path))).join(' · ')}${e.items.length > 4 ? ` · +${e.items.length - 4}` : ''}</div>`);
     case 'trash': {
       if (e.status === 'pending') {
-        const key = `${m.chat}:${e.i}`, off = TRASH_OFF.get(key) || new Set();
-        const rows = e.items.map(x => `<label class="titem"><input type="checkbox" data-tpick="${key}" data-path="${esc(x.path)}"${off.has(x.path) ? '' : ' checked'}>
-          <span title="${esc(x.path)}">${esc(rel(x.path))}</span><b>${fmtSize(x.size)}</b></label>`).join('');
+        const key = `${m.chat}:${e.i}`;
+        if (!TRASH_OFF.has(key)) TRASH_OFF.set(key, new Set(e.items.filter(x => x.sensitive).map(x => x.path))); // app data: unchecked at first
+        const off = TRASH_OFF.get(key);
+        const rows = e.items.map(x => `<label class="titem${x.sensitive ? ' tsens' : ''}"><input type="checkbox" data-tpick="${key}" data-path="${esc(x.path)}"${x.sensitive ? ' data-sens="1"' : ''}${off.has(x.path) ? '' : ' checked'}>
+          <span title="${esc(x.path)}">${esc(rel(x.path))}</span>${x.sensitive ? `<i class="tsenstag">${t('données d’app')}</i>` : ''}<b>${fmtSize(x.size)}</b></label>`).join('');
         return `<div class="act trash pending"><div class="tcard" data-card="${key}">
           <div class="thead2"><b class="tcount"></b><b class="tsize"></b></div>
           ${e.reason ? `<p class="treason">${esc(e.reason)}</p>` : ''}
           ${e.items.length > 1 ? `<div class="ttools"><button class="linkbtn" data-tall="${key}" data-on="1">${t('Tout cocher')}</button><button class="linkbtn" data-tall="${key}" data-on="0">${t('Tout décocher')}</button></div>` : ''}
           <div class="tlist">${rows}</div>
+          ${e.items.some(x => x.sensitive) ? `<label class="tstrong" hidden><input type="checkbox" data-tstrong="${key}"${TRASH_ACK.has(key) ? ' checked' : ''}> ${t('Données d’applications cochées : j’ai vérifié et je veux vraiment les supprimer')}</label>` : ''}
           <div class="tbtns"><button class="btn danger sm tgo" data-confirm="${e.i}" data-chat="${m.chat}" data-accept="1"></button>
           <button class="btn sm" data-confirm="${e.i}" data-chat="${m.chat}" data-accept="0">${t('Non')}</button></div></div></div>`;
       }
@@ -610,10 +632,12 @@ function updateTrashCard(card) {
   card.querySelector('.tsize').textContent = fmtSize(total);
   const go = card.querySelector('.tgo');
   go.textContent = on.length > 1 ? t('Mettre {n} éléments à la corbeille', { n: on.length }) : t('Mettre à la corbeille');
-  go.disabled = !on.length;
+  const strong = card.querySelector('.tstrong'), sens = on.some(b => b.dataset.sens);
+  if (strong) strong.hidden = !sens;
+  go.disabled = !on.length || (sens && !strong.querySelector('input').checked);
 }
 const flash = el => { if (!el) return; el.classList.remove('ai-flash'); void el.offsetWidth; el.classList.add('ai-flash'); };
-function setTabSilently(tab) { S.tab = tab; for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === tab); }
+function setTabSilently(tab) { S.tab = tab; markTab(tab); }
 
 let chatPoll = null;
 async function sendChat(text) {
@@ -669,7 +693,7 @@ async function stopChat() {
 
 function openLink(a) {
   const id = +a.dataset.id, parent = +a.dataset.parent;
-  if (S.tab !== 'content') { S.tab = 'content'; for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === 'content'); }
+  if (S.tab !== 'content') { S.tab = 'content'; markTab('content'); }
   if (a.dataset.dir === '1') navigate(id); else navigate(parent, id);
 }
 
@@ -728,6 +752,7 @@ async function loadProviders(refresh) {
     if (changed && !typing) {
       if (!chatBusy) renderChat();
       if (!$('#aiModal').hidden) renderAccounts();
+      if (!$('#onb').hidden && onbKey() === 'ai') renderOnboarding();
       if (S.tab === 'suggest' && AI) renderAI({ ...AI, providers: PROVS });
     }
     clearTimeout(loginTimer);
@@ -767,8 +792,9 @@ window.addEventListener('focus', async () => {
 });
 
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-connect],[data-cancel-login],[data-code-submit],[data-logout],[data-ext],[data-accounts],#aiModalClose');
-  if (!t && e.target.id === 'aiModal') return closeAccounts();
+  const target = /** @type {HTMLElement} */ (e.target);
+  const t = /** @type {HTMLElement | null} */ (target.closest('[data-connect],[data-cancel-login],[data-code-submit],[data-logout],[data-ext],[data-accounts],#aiModalClose'));
+  if (!t && target.id === 'aiModal') return closeAccounts();
   if (!t) return;
   e.preventDefault();
   try {
@@ -781,13 +807,15 @@ document.addEventListener('click', async e => {
     if (t.dataset.ext) return post('/api/external', { url: t.dataset.ext });
   } catch (err) { toast(esc(err.message), 'err'); }
 });
-document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'loginCode') submitCode(e.target.value); });
+document.addEventListener('keydown', e => { const el = /** @type {HTMLInputElement} */ (e.target); if (e.key === 'Enter' && el.id === 'loginCode') submitCode(el.value); });
 
 $('#chatForm').addEventListener('submit', e => { e.preventDefault(); chatBusy ? stopChat() : sendChat($('#chatInput').value); });
 $('#chatInput').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(e.target.value); }
 });
 $('#chatMsgs').addEventListener('change', e => {
+  const ack = e.target.closest('input[data-tstrong]');
+  if (ack) { ack.checked ? TRASH_ACK.add(ack.dataset.tstrong) : TRASH_ACK.delete(ack.dataset.tstrong); return updateTrashCard(ack.closest('.tcard')); }
   const b = e.target.closest('input[data-tpick]'); if (!b) return;
   const off = TRASH_OFF.get(b.dataset.tpick) || new Set();
   b.checked ? off.delete(b.dataset.path) : off.add(b.dataset.path);
@@ -803,9 +831,10 @@ $('#chatMsgs').addEventListener('click', async e => {
   const c = e.target.closest('[data-confirm]');
   if (c) {
     const card = c.closest('.tcard');
-    const paths = [...card.querySelectorAll('input[data-tpick]')].filter(b => b.checked).map(b => b.dataset.path);
+    const on = [...card.querySelectorAll('input[data-tpick]')].filter(b => b.checked), paths = on.map(b => b.dataset.path);
+    const confirmSensitive = card.querySelector('input[data-tstrong]')?.checked ? on.filter(b => b.dataset.sens).map(b => b.dataset.path) : [];
     for (const b of card.querySelectorAll('button, input')) b.disabled = true;
-    try { await post('/api/chat/confirm', { chat: c.dataset.chat, event: +c.dataset.confirm, accept: c.dataset.accept === '1', paths }); } catch (err) { toast(esc(err.message), 'err'); }
+    try { await post('/api/chat/confirm', { chat: c.dataset.chat, event: +c.dataset.confirm, accept: c.dataset.accept === '1', paths, confirmSensitive }); } catch (err) { toast(esc(err.message), 'err'); }
     return;
   }
   const q = e.target.closest('[data-q]'); if (q) return sendChat(q.dataset.q);
@@ -824,7 +853,7 @@ async function startScan(p) {
     S.sel.clear(); updateSelBar();
     S.root = { id: r.id, path: p };
     show('app');
-    S.tab = 'content'; for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === 'content');
+    S.tab = 'content'; markTab('content');
     S.wasScanning = true;
     await navigate(r.id);
     poll(true);
@@ -874,14 +903,108 @@ function renderWelcome(st) {
   $('#hint').innerHTML = HINT;
 }
 function applyPlatformLabels() {
-  for (const el of document.querySelectorAll('[data-icon]')) el.insertAdjacentHTML('afterbegin', svg(el.dataset.icon));
+  for (const el of document.querySelectorAll('[data-icon]')) el.insertAdjacentHTML('afterbegin', svg(/** @type {HTMLElement} */ (el).dataset.icon));
   applyI18n();
   $('#finderBtn').textContent = FM; $('#finderBtn').title = t('Ouvrir dans le {fm}', { fm: FM });
   $('#trashBtn').innerHTML = `${t('Mettre à la corbeille')} <kbd>${TRASH_KEY}</kbd>`;
   $('.keyhint').textContent = t('↑↓ naviguer · → ouvrir · ← remonter · Espace aperçu · {mod}/⇧clic sélection · {del} corbeille', { mod: IS_MAC ? '⌘' : 'Ctrl', del: TRASH_KEY });
   $('#pickBtn').hidden = !IS_APP;
 }
-window.taupe = { pick: pickFolder, rescan: () => !$('#app').hidden && $('#rescanBtn').click(), toggleChat: () => $('#chatToggle').click() };
+// ---------- Onboarding (first launch, then Help → Show the Welcome Tour) ----------
+// Steps: welcome → Full Disk Access (macOS app only) → AI assistant (optional) → first scan.
+// Progress is kept in localStorage (the app keeps the same port, hence the same origin, between launches).
+const ONB_STEPS = ['hello', ...(IS_MAC && IS_APP ? ['disk'] : []), 'ai', 'go'];
+let onbI = 0, onbFDA = null, onbTimer = null;
+const onbKey = () => ONB_STEPS[onbI];
+const onbIcon = k => `<i class="onb-ic">${svg(k)}</i>`;
+function openOnboarding(at = 0) {
+  onbI = Math.max(0, Math.min(ONB_STEPS.length - 1, at));
+  $('#onb').hidden = false;
+  renderOnboarding();
+  $('#onbNext').focus();
+}
+function closeOnboarding() {
+  $('#onb').hidden = true; clearTimeout(onbTimer);
+  lsSet('taupe.onboard', 'done');
+}
+function onbGo(d) {
+  onbI = Math.max(0, Math.min(ONB_STEPS.length - 1, onbI + d));
+  lsSet('taupe.onboard', onbKey()); // resume here if macOS relaunches Taupe (Full Disk Access)
+  renderOnboarding();
+  $('#onbNext').focus();
+}
+async function checkFDA() {
+  clearTimeout(onbTimer);
+  if (onbKey() !== 'disk' || $('#onb').hidden) return;
+  try { const v = (await get('/api/privacy')).fullDiskAccess; if (v !== onbFDA) { onbFDA = v; renderOnboarding(); } } catch {}
+  onbTimer = setTimeout(checkFDA, 2000);
+}
+function renderOnboarding() {
+  if ($('#onb').hidden || document.activeElement?.id === 'loginCode') return;
+  const k = onbKey(), last = onbI === ONB_STEPS.length - 1;
+  let html, next;
+  if (k === 'hello') {
+    html = `<div class="onb-hero">${$('.logo-paw')?.outerHTML || ''}</div>
+      <h2 id="onbTitle">${t('Bienvenue dans Taupe')}</h2>
+      <p class="onb-lead">${t('Trouve ce qui remplit ton disque et fais le ménage, sans mauvaise surprise.')}</p>
+      <ul class="onb-list">
+        <li>${onbIcon('disk')}<div><b>${t('Tout voir d’un coup d’œil')}</b><span>${t('Carte des dossiers, plus gros fichiers, répartition par type : en quelques secondes, même pour un disque entier.')}</span></div></li>
+        <li>${onbIcon('trash')}<div><b>${t('Rien ne part sans toi')}</b><span>${t('Tout passe par la Corbeille. Les dossiers système, tes dossiers principaux et tes clés (.ssh…) sont protégés.')}</span></div></li>
+        <li>${onbIcon('sparkle')}<div><b>${t('Un assistant, si tu veux')}</b><span>${t('Claude ou ChatGPT, avec ton abonnement. Il ne voit que les noms, tailles et dates — jamais le contenu de tes fichiers.')}</span></div></li>
+      </ul>`;
+    next = t('Commencer');
+  } else if (k === 'disk') {
+    const ok = onbFDA === true;
+    html = `<h2 id="onbTitle">${t('Laisse Taupe tout voir')}</h2>
+      <p class="onb-lead">${t('macOS cache certains dossiers (Mail, Messages, Photos, données d’apps…). Sans l’<b>Accès complet au disque</b>, Taupe ne peut pas les mesurer et sous-estime ce qui prend de la place.')}</p>
+      <div class="onb-state ${ok ? 'ok' : ''}">${ok ? `${svg('check')} ${t('Accès complet au disque activé')}` : `<span class="spin"></span> ${t('En attente de l’autorisation…')}`}</div>
+      ${ok ? '' : `<ol class="onb-steps">
+        <li><span>${t('Ouvre les Réglages au bon endroit')}</span><button class="btn sm" data-privacy>${t('Ouvrir les Réglages')}</button></li>
+        <li><span>${t('Active <b>Taupe</b> dans la liste (sinon : « + », puis Applications → Taupe).')}</span></li>
+        <li><span>${t('Si macOS propose de <b>quitter et rouvrir</b> Taupe, accepte : tu reviendras ici.')}</span></li>
+      </ol>`}
+      <p class="onb-note">${t('Taupe ne lit jamais le contenu de tes fichiers : seulement leurs noms, tailles et dates.')}</p>`;
+    next = ok ? t('Continuer') : t('Plus tard');
+  } else if (k === 'ai') {
+    const prov = (key, plans) => {
+      const p = PROVS?.[key], on = ready(p);
+      return `<div class="onb-prov${on ? ' on' : ''}"><div class="onb-provh"><b>${NAME[key]}</b><span class="muted small">${plans}</span><span class="grow"></span>
+        <span class="onb-pill">${!PROVS ? '…' : on ? `${svg('check')} ${t('Connecté')}` : p?.installed ? t('Non connecté') : t('Non installé')}</span></div>
+        ${on ? (p.detail ? `<p class="muted small">${esc(t(p.detail))}</p>` : '') : PROVS ? connectBlock(key) : ''}</div>`;
+    };
+    html = `<h2 id="onbTitle">${t('Ton assistant IA')} <span class="tag">${t('facultatif')}</span></h2>
+      <p class="onb-lead">${t('Pose des questions sur tes dossiers et laisse-le trier pour toi. Il utilise ton abonnement : pas de clé API, pas de frais en plus.')}</p>
+      <div class="onb-provs">${prov('claude', 'Pro · Max')}${prov('codex', 'Plus · Pro')}</div>
+      <p class="onb-note">${t('Il te faut l’outil officiel (Claude Code ou Codex) : s’il manque, Taupe l’installe pour toi, rien d’autre à installer. La connexion se fait ensuite dans ton navigateur.')}</p>`;
+    next = anyReady() ? t('Continuer') : t('Plus tard');
+  } else {
+    const cards = (S.status?.places || []).map(p => `<button class="card" data-onb-path="${esc(p.path)}"><b>${esc(p.label)}</b><small>${esc(p.hint)}</small></button>`);
+    if (IS_APP) cards.push(`<button class="card" data-onb-pick="1"><b>${t('Choisir un dossier…')}</b><small>${MOD}O</small></button>`);
+    html = `<h2 id="onbTitle">${t('C’est parti')}</h2>
+      <p class="onb-lead">${t('Choisis quoi analyser. Le dossier perso est souvent le plus parlant.')}</p>
+      <div class="cards onb-cards">${cards.join('')}</div>
+      <div class="onb-keys"><span><kbd>${t('Espace')}</kbd> ${t('aperçu')}</span><span><kbd>${TRASH_KEY}</kbd> ${t('corbeille')}</span><span><kbd>${MOD}J</kbd> ${t('assistant')}</span><span><kbd>${MOD}O</kbd> ${t('autre dossier')}</span></div>`;
+    next = t('Terminer');
+  }
+  $('#onbBody').innerHTML = html;
+  $('#onbBody').dataset.step = k;
+  $('#onbDots').innerHTML = ONB_STEPS.map((_, i) => `<i class="${i === onbI ? 'on' : i < onbI ? 'done' : ''}"></i>`).join('');
+  $('#onbBack').hidden = onbI === 0;
+  $('#onbSkip').hidden = last;
+  $('#onbNext').textContent = next;
+  if (k === 'disk' && !onbTimer) checkFDA();
+  if (k !== 'disk') { clearTimeout(onbTimer); onbTimer = null; }
+}
+$('#onbNext').addEventListener('click', () => (onbI === ONB_STEPS.length - 1 ? closeOnboarding() : onbGo(1)));
+$('#onbBack').addEventListener('click', () => onbGo(-1));
+$('#onbSkip').addEventListener('click', closeOnboarding);
+$('#onb').addEventListener('click', async e => {
+  const target = /** @type {HTMLElement} */ (e.target);
+  if (target.closest('[data-privacy]')) { try { await post('/api/privacy/open'); } catch (err) { toast(esc(err.message), 'err'); } return; }
+  const card = /** @type {HTMLElement | null} */ (target.closest('[data-onb-path],[data-onb-pick]'));
+  if (card) { closeOnboarding(); return card.dataset.onbPick ? pickFolder() : startScan(card.dataset.onbPath); }
+});
+/** @type {any} */ (window).taupe = { onboarding: () => openOnboarding(0), pick: pickFolder, rescan: () => !$('#app').hidden && $('#rescanBtn').click(), toggleChat: () => $('#chatToggle').click() };
 $('#logo').addEventListener('click', e => { e.preventDefault(); if (S.root) { show('app'); navigate(S.root.id); } else show('welcome'); });
 $('#cancelBtn').addEventListener('click', () => post('/api/cancel'));
 $('#upBtn').addEventListener('click', goUp);
@@ -943,7 +1066,7 @@ $('#suggestView').addEventListener('click', async e => {
     try { await post('/api/ai/start', { id: S.cur, provider, lang: LANG }); } catch (err) { return toast(esc(err.message), 'err'); }
     return refreshAI();
   }
-  if (t.dataset.copy != null) { navigator.clipboard.writeText(t.dataset.copy).then(() => toast(t('Commande copiée'), 'ok', 2000)); return; }
+  if (t.dataset.copy != null) { navigator.clipboard.writeText(t.dataset.copy).then(() => toast(`${t('Commande copiée')}<br><span class="muted small">${t('Relis-la avant de la coller dans un terminal.')}</span>`, 'ok', 4000)); return; }
   if (t.hasAttribute('data-selsafe')) return selectItems(AI.job.result.items.filter(x => x.risk === 'safe' && x.action === 'trash'));
   const grp = t.closest('.sgroup');
   if (t.hasAttribute('data-more') && grp) { const k = grp.dataset.key; expanded.has(k) ? expanded.delete(k) : expanded.add(k); return renderRules(RULES); }
@@ -974,16 +1097,23 @@ $('#selClear').addEventListener('click', () => {
 $('#trashBtn').addEventListener('click', askTrash);
 $('#mCancel').addEventListener('click', closeModal);
 $('#mOk').addEventListener('click', doTrash);
+$('#mStrongOk').addEventListener('change', e => { $('#mOk').disabled = !e.target.checked; });
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
 
 document.addEventListener('keydown', e => {
+  const target = /** @type {HTMLElement} */ (e.target);
+  if (!$('#onb').hidden) {
+    if (e.key === 'Escape') closeOnboarding();
+    else if (e.key === 'Enter' && !target.closest('input, button, textarea')) { e.preventDefault(); $('#onbNext').click(); }
+    return;
+  }
   if (!$('#aiModal').hidden) { if (e.key === 'Escape') closeAccounts(); return; }
   if (!$('#modal').hidden) {
     if (e.key === 'Escape') closeModal();
-    else if (e.key === 'Enter') { e.preventDefault(); doTrash(); }
+    else if (e.key === 'Enter' && target.id !== 'mStrongOk') { e.preventDefault(); doTrash(); }
     return;
   }
-  if ($('#app').hidden || e.target.matches('input:not([type=checkbox]), textarea, select')) return;
+  if ($('#app').hidden || target.matches('input:not([type=checkbox]), textarea, select')) return;
   const r = S.view[S.focus], meta = e.metaKey || e.ctrlKey;
   const k = e.key;
   if (k === 'ArrowDown' && !meta) { e.preventDefault(); setFocus(Math.min(S.focus + 1, S.view.length - 1)); }
@@ -1007,5 +1137,8 @@ document.addEventListener('keydown', e => {
   if (S.status) renderWelcome(S.status);
   if (S.root) { show('app'); $('#pathInput').value = pretty(S.root.path); await navigate(S.root.id); }
   else show('welcome');
+  // First launch (or interrupted tour, e.g. macOS relaunched Taupe for Full Disk Access): show the onboarding
+  const onb = lsGet('taupe.onboard');
+  if (onb !== 'done' && !S.root) openOnboarding(Math.max(0, ONB_STEPS.indexOf(onb)));
   if (!S.wasScanning) poll();
 })();

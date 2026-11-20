@@ -23,6 +23,8 @@ const EN = {
   'Route inconnue': 'Unknown route', 'Méthode refusée': 'Method not allowed',
   'Chemin protégé (système ou dossier principal)': 'Protected path (system or main folder)',
   'Non déplacé': 'Not moved',
+  'Réservé à macOS': 'macOS only',
+  'Données d’application : confirmation renforcée requise': 'App data: reinforced confirmation required',
   'L’élément a changé depuis l’affichage — recharge': 'The item changed since it was displayed — reload',
 
   // Suggestions (rules)
@@ -86,10 +88,10 @@ const EN = {
   'Fournisseur inconnu': 'Unknown provider',
   'CLI « {p} » introuvable. Connecte ton compte d’abord.': '“{p}” CLI not found. Connect your account first.',
   'Installation terminée mais « {p} » reste introuvable. Redémarre Taupe.': 'Installation finished but “{p}” still cannot be found. Restart Taupe.',
-  'Installer ChatGPT (Codex) nécessite Node.js : installe-le depuis nodejs.org puis réessaie.': 'Installing ChatGPT (Codex) requires Node.js: install it from nodejs.org, then try again.',
   'Installation échouée (code {p})': 'Installation failed (code {p})',
   'Délai dépassé ({p} s)': 'Timed out ({p} s)',
   'Réponse IA illisible': 'Unreadable AI response',
+  'Codex est trop ancien pour qu’on lui retire son shell. Mets-le à jour avec son installeur officiel : {p}': 'Codex is too old for Taupe to remove its shell. Update it with its official installer: {p}',
 };
 
 export function tr(lang, s, v) {

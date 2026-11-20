@@ -4,6 +4,27 @@ All notable changes to Taupe are documented in this file. The format is based on
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-20
+
+### Added
+- **Onboarding** on first launch, reopenable from Help → Show the Welcome Tour: what Taupe does and how it protects your files; on macOS, **Full Disk Access** with a button that opens the right System Settings pane and a live check of the permission (the tour resumes if macOS relaunches Taupe); connecting Claude or ChatGPT (optional); then the first folder to scan.
+
+### Fixed
+- The app now keeps the same local port between launches, so the page keeps its storage: the chat history, the chosen AI and the onboarding progress were lost on every restart.
+
+### Security
+- **Codex (ChatGPT) no longer has a shell**: its command tools are switched off (`--disable shell_tool --disable unified_exec`), so the "no shell" promise now holds for both AIs. A Codex too old for these flags is refused with a message asking to update it. A new test checks the arguments passed to both CLIs.
+- The anti-CSRF token is **no longer written into the page** in the app: Electron adds it to the window's requests. The browser development mode is unchanged.
+- Protected paths are checked **after resolving symlinks** and **without case** on macOS / Windows. Secrets are protected too (`~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, `~/.docker`, keychains, Windows credentials…).
+- **Reinforced confirmation** for app data (`~/Library/…`, `AppData\…`, except the temporary folder): unchecked by default in the assistant, and an explicit "I checked every item" box is required.
+- Commands suggested by the AI show a "check it before running it" warning.
+- Inputs used as keys (AI provider, MCP tool, route, native action) only accept own keys (`Object.hasOwn`), and locating the AI CLIs no longer pastes a name into a shell command.
+
+### Changed
+- **Connecting ChatGPT no longer needs npm or Node.js**: Taupe installs Codex with OpenAI's official standalone installer (`install.sh` / `install.ps1`), like it already does for Claude Code, and finds it in its Windows install folder. The installer runs non-interactively.
+- **The project now uses Bun** instead of npm: `bun install` (`bun.lock` replaces `package-lock.json`), `bun start`, `bun run check`, `bun run test`, and the tests and checks run on the Bun runtime. CI, releases and Dependabot use Bun. Building the installers still needs Node.js, since electron-builder hangs on Bun; the app itself still runs on Electron's Node. `scripts/check.mjs` is gone: ESLint already reports syntax errors.
+- `bun run check` also runs ESLint and `tsc --checkJs`. New CodeQL workflow, which fails on any alert that is not a reviewed false positive (`.github/codeql-accepted.json`); GitHub Actions pinned by commit SHA, with per-job permissions; releases ship a `SHA256SUMS.txt`.
+
 ## [1.1.0] - 2026-11-19
 
 ### Added
