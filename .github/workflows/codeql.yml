@@ -17,7 +17,7 @@ jobs:
     permissions:
       actions: read
       contents: read
-      security-events: write
+      security-events: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -27,6 +27,23 @@ jobs:
           languages: javascript-typescript
           build-mode: none
           queries: security-extended
+      # The repository is private and GitHub code scanning is not enabled on it (it needs GitHub Code
+      # Security, or a public repository), so results cannot be uploaded: the job fails on any alert
+      # instead, and the SARIF report is attached to the run. Once code scanning is enabled, switch to
+      # `upload: always` (and `security-events: write`) to get the alerts in the Security tab.
       - uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           category: /language:javascript-typescript
+          upload: never
+          output: sarif
+      - name: Fail on CodeQL alerts
+        run: |
+          jq -r '.runs[].results[] | "::error file=\(.locations[0].physicalLocation.artifactLocation.uri),line=\(.locations[0].physicalLocation.region.startLine)::\(.ruleId): \(.message.text | split("\n")[0])"' sarif/*.sarif
+          count=$(jq '[.runs[].results[]] | length' sarif/*.sarif | paste -sd+ - | bc)
+          echo "CodeQL alerts: $count"
+          test "$count" -eq 0
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: codeql-sarif
+          path: sarif/
