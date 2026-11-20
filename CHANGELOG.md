@@ -4,6 +4,17 @@ All notable changes to Taupe are documented in this file. The format is based on
 
 ## [Unreleased]
 
+### Security
+- **Codex (ChatGPT) no longer has a shell**: its command tools are switched off (`--disable shell_tool --disable unified_exec`), so the "no shell" promise now holds for both AIs. A Codex too old for these flags is refused with a message asking to update it. A new test checks the arguments passed to both CLIs.
+- The anti-CSRF token is **no longer written into the page** in the app: Electron adds it to the window's requests. The browser development mode is unchanged.
+- Protected paths are checked **after resolving symlinks** and **without case** on macOS / Windows. Secrets are protected too (`~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, `~/.docker`, keychains, Windows credentials…).
+- **Reinforced confirmation** for app data (`~/Library/…`, `AppData\…`): unchecked by default in the assistant, and an explicit "I checked every item" box is required.
+- Commands suggested by the AI show a "check it before running it" warning.
+- Inputs used as keys (AI provider, MCP tool, route, native action) only accept own keys (`Object.hasOwn`), and locating the AI CLIs no longer pastes a name into a shell command.
+
+### Changed
+- `npm run check` also runs ESLint and `tsc --checkJs`. New CodeQL workflow; GitHub Actions pinned by commit SHA, with per-job permissions; releases ship a `SHA256SUMS.txt`.
+
 ## [1.1.0] - 2026-11-19
 
 ### Added

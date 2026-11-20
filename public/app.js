@@ -1,5 +1,6 @@
 'use strict';
-const TOKEN = document.querySelector('meta[name=token]').content;
+// Browser development mode only: in the app the page has no token, Electron adds the header itself
+const TOKEN = /** @type {HTMLMetaElement | null} */ (document.querySelector('meta[name=token]'))?.content || '';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -11,7 +12,8 @@ const TRASH_KEY = IS_MAC ? '⌘⌫' : t('Suppr'), MOD = IS_MAC ? '⌘' : 'Ctrl+'
 const joinPath = (a, b) => (b ? (a.endsWith(SEP) ? a + b : a + SEP + b) : a);
 
 async function api(method, url, body) {
-  const r = await fetch(url, { method, headers: { 'x-token': TOKEN, 'x-lang': LANG, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const headers = { 'x-lang': LANG, 'content-type': 'application/json', ...(TOKEN ? { 'x-token': TOKEN } : {}) };
+  const r = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || r.statusText);
   return j;
@@ -33,7 +35,7 @@ function fmtSize(b) {
 function relTime(sec) {
   if (!sec) return '';
   const d = sec - Date.now() / 1000, a = Math.abs(d);
-  for (const [u, s] of [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]])
+  for (const [u, s] of /** @type {[Intl.RelativeTimeFormatUnit, number][]} */ ([['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]]))
     if (a >= s) return rtf.format(Math.round(d / s), u);
   return t('à l’instant');
 }
@@ -236,9 +238,11 @@ function goUp() {
   if (c && c.length > 1) navigate(c[c.length - 2].id, S.cur);
 }
 
+// Highlights the button of the current tab
+const markTab = tab => { for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', /** @type {HTMLElement} */ (b).dataset.tab === tab); };
 function setTab(tab) {
   S.tab = tab;
-  for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === tab);
+  markTab(tab);
   S.sort = { k: 'size', d: -1 }; S.focus = -1; $('#list').scrollTop = 0;
   load();
 }
@@ -329,7 +333,7 @@ function renderTypes(t) {
   const total = S.data.node.size || 1;
   const maxC = t.categories[0]?.size || 1, maxE = t.extensions[0]?.size || 1;
   const cat = t.categories.map(c => {
-    const [e, col] = CAT_STYLE[c.key] || ['📄', '#888'];
+    const col = (CAT_STYLE[c.key] || ['📄', '#888'])[1];
     return `<div class="trow"><span class="tdot" style="background:${col}"></span><span>${esc(t(c.label))}</span><span class="bar"><i style="width:${pct(c.size, maxC)}%;background:${col}"></i></span><b>${fmtSize(c.size)}</b><span class="muted small r">${fmtPct(pct(c.size, total))}</span></div>`;
   }).join('');
   const ext = t.extensions.map(x =>
@@ -383,11 +387,11 @@ function renderRules(groups) {
 
 function renderAI(st) {
   AI = st;
-  const j = st.job, labels = st.labels;
+  const j = st.job;
   PROVS = st.providers;
   const running = j.status === 'running';
   const opts = providerOptions();
-  let body = '';
+  let body;
   if (running) {
     body = `<div class="aistate"><span class="spin"></span> ${t('{p} analyse <b>{path}</b>… {s} s <span class="muted">(compte 1 à 2 min)</span>', { p: esc(AI_LABEL[j.provider] || j.provider), path: esc(pretty(j.target)), s: Math.round(j.elapsed / 1000) })}</div>`;
   } else if (j.status === 'error') {
@@ -403,7 +407,7 @@ function renderAI(st) {
       <div class="sitems">${items.map(it => sugItem(it, {
         noSel: it.action === 'command' || it.protected,
         extra: `<div class="sreason">${riskBadge(it.risk)} ${esc(it.reason)}</div>` +
-          (it.command ? `<div class="scmd"><code>${esc(it.command)}</code><button class="btn ghost sm" data-copy="${esc(it.command)}">${t('Copier')}</button></div>` : ''),
+          (it.command ? `<div class="scmdwarn">${t('Commande proposée par l’IA : vérifie-la avant de l’exécuter.')}</div><div class="scmd"><code>${esc(it.command)}</code><button class="btn ghost sm" data-copy="${esc(it.command)}">${t('Copier')}</button></div>` : ''),
       })).join('') || `<p class="muted">${t('Aucune suggestion exploitable.')}</p>`}</div>`;
   } else {
     body = !anyReady() ? `<p class="muted small">${t('Connecte ton abonnement Claude ou ChatGPT pour obtenir une liste triée de ce que tu peux supprimer, avec le niveau de risque. L’IA ne voit que les noms, tailles et dates — jamais le contenu de tes fichiers.')}</p>${connectBlock()}` : `<p class="muted small">${t('L’IA voit les noms, tailles et dates des éléments les plus lourds — <b>jamais le contenu de tes fichiers</b> — et propose quoi supprimer, avec le niveau de risque. Rien n’est supprimé sans toi.')}</p>`;
@@ -454,27 +458,37 @@ function updateSelBar() {
   $('#selText').innerHTML = tn(items.length, '<b>{n}</b> élément sélectionné · <b>{size}</b>', '<b>{n}</b> éléments sélectionnés · <b>{size}</b>', { size: fmtSize(total) });
 }
 
-let pendingTrash = null;
+let pendingTrash = null, strongTrash = false;
 function askTrash() {
   let items = selItems();
   if (!items.length && S.focus >= 0) { const r = S.view[S.focus]; items = [{ id: r.id, path: rowPath(r), size: r.size, name: r.name, dir: r.dir, r }]; }
   if (!items.length) return;
   items.sort((a, b) => b.size - a.size);
-  pendingTrash = items;
+  openTrashModal(items, false);
+}
+// strong: app data (~/Library, AppData) refused by the engine without an explicit second confirmation
+function openTrashModal(items, strong) {
+  pendingTrash = items; strongTrash = strong;
   const total = items.reduce((a, b) => a + b.size, 0);
   $('#mTitle').textContent = items.length > 1 ? t('Mettre {n} éléments à la corbeille ? ({size})', { n: items.length, size: fmtSize(total) }) : t('Mettre « {name} » à la corbeille ? ({size})', { name: items[0].name, size: fmtSize(total) });
   $('#mList').innerHTML = items.map(it => `<div><code title="${esc(it.path)}">&lrm;${esc(pretty(it.path))}&lrm;</code><b>${fmtSize(it.size)}</b></div>`).join('');
+  $('#mWarn').hidden = $('#mStrong').hidden = !strong;
+  $('#mStrongOk').checked = false;
+  $('#mOk').disabled = strong;
   $('#modal').hidden = false;
-  $('#mOk').focus();
+  (strong ? $('#mStrongOk') : $('#mOk')).focus();
 }
 function closeModal() { $('#modal').hidden = true; pendingTrash = null; $('#list').focus({ preventScroll: true }); }
 
 async function doTrash() {
-  const items = pendingTrash; if (!items) return;
+  const items = pendingTrash, strong = strongTrash; if (!items || $('#mOk').disabled) return;
   $('#mOk').disabled = true;
+  let again = [];
   try {
-    const r = await post('/api/trash', { items: items.map(i => ({ id: i.id, path: i.path })) });
+    const r = await post('/api/trash', { items: items.map(i => ({ id: i.id, path: i.path })), confirmSensitive: strong ? items.map(i => i.path) : [] });
     for (const d of r.done) S.sel.delete(d.id);
+    again = r.failed.filter(f => f.needsConfirm);
+    r.failed = r.failed.filter(f => !f.needsConfirm);
     if (r.done.length) toast(`${tn(r.done.length, '✓ {n} élément à la corbeille · <b>{size}</b>', '✓ {n} éléments à la corbeille · <b>{size}</b>', { size: fmtSize(r.freed) })}<br><span class="muted small">${t('Vide la Corbeille pour vraiment libérer l’espace.')}</span>`, 'ok', 7000);
     for (const f of r.failed) toast(`✗ ${esc(pretty(f.path))}<br><span class="muted small">${esc(f.error)}</span>`, 'err', 9000);
   } catch (e) { toast(esc(e.message), 'err'); }
@@ -482,11 +496,12 @@ async function doTrash() {
   closeModal();
   updateSelBar();
   await load();
+  if (again.length) { const byPath = new Map(items.map(i => [i.path, i])); openTrashModal(again.map(f => byPath.get(f.path) || f), true); }
 }
 
 async function action(a, r) {
   try {
-    if (a === 'go') { if (S.tab !== 'content') { S.tab = 'content'; for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === 'content'); } return navigate(r.id); }
+    if (a === 'go') { if (S.tab !== 'content') { S.tab = 'content'; markTab('content'); } return navigate(r.id); }
     if (a === 'ql') return await post('/api/quicklook', { id: r.id });
     if (a === 'reveal') return await post('/api/reveal', { id: r.id });
     if (a === 'open') return await post('/api/open', { id: r.id });
@@ -497,7 +512,7 @@ function openRow(r) { if (r.dir && !r.skip) action('go', r); else action('open',
 // ---------- Contextual AI chat ----------
 let chatOpen = lsGet('taupe.chatOpen') !== '0';
 let CHAT = (() => { try { return JSON.parse(lsGet('taupe.chat') || '[]').map(m => m.pending ? { ...m, pending: false, error: true, content: t('Interrompu.') } : m); } catch { return []; } })();
-let chatBusy = false, chatTimer = null;
+let chatBusy = false;
 const CHAT_IDEAS = ['Qu’est-ce qui prend le plus de place ici ?', 'Trouve tous les node_modules et sélectionne-les',
   'Montre-moi mes plus gros fichiers', 'Supprime les vieux installeurs .dmg', 'C’est quoi ces dossiers ?'];
 const saveChat = () => lsSet('taupe.chat', JSON.stringify(CHAT.slice(-40)));
@@ -551,6 +566,7 @@ const short = p => { const parts = String(p).split(SEP).filter(Boolean); return 
 const where = p => `<span class="ap" title="${esc(p)}">${esc(short(p))}</span>`;
 const relTo = (base, p) => (base && p.startsWith(base.endsWith(SEP) ? base : base + SEP) ? p.slice(base.length).replace(/^[\\/]/, '') : short(p));
 const TRASH_OFF = new Map(); // items unchecked in a confirmation card (key chat:event)
+const TRASH_ACK = new Set(); // cards whose reinforced confirmation (app data) is ticked
 function renderAct(e, m) {
   const run = e.status === 'running', k = `act ${e.type} ${run ? 'running' : e.status}`;
   const line = (label, extra = '') => `<div class="${k}"><i class="dot"></i><span class="lbl">${label}</span>${extra}</div>`;
@@ -565,14 +581,17 @@ function renderAct(e, m) {
       `<div class="asub">${e.items.slice(0, 4).map(x => esc(rel(x.path))).join(' · ')}${e.items.length > 4 ? ` · +${e.items.length - 4}` : ''}</div>`);
     case 'trash': {
       if (e.status === 'pending') {
-        const key = `${m.chat}:${e.i}`, off = TRASH_OFF.get(key) || new Set();
-        const rows = e.items.map(x => `<label class="titem"><input type="checkbox" data-tpick="${key}" data-path="${esc(x.path)}"${off.has(x.path) ? '' : ' checked'}>
-          <span title="${esc(x.path)}">${esc(rel(x.path))}</span><b>${fmtSize(x.size)}</b></label>`).join('');
+        const key = `${m.chat}:${e.i}`;
+        if (!TRASH_OFF.has(key)) TRASH_OFF.set(key, new Set(e.items.filter(x => x.sensitive).map(x => x.path))); // app data: unchecked at first
+        const off = TRASH_OFF.get(key);
+        const rows = e.items.map(x => `<label class="titem${x.sensitive ? ' tsens' : ''}"><input type="checkbox" data-tpick="${key}" data-path="${esc(x.path)}"${x.sensitive ? ' data-sens="1"' : ''}${off.has(x.path) ? '' : ' checked'}>
+          <span title="${esc(x.path)}">${esc(rel(x.path))}</span>${x.sensitive ? `<i class="tsenstag">${t('données d’app')}</i>` : ''}<b>${fmtSize(x.size)}</b></label>`).join('');
         return `<div class="act trash pending"><div class="tcard" data-card="${key}">
           <div class="thead2"><b class="tcount"></b><b class="tsize"></b></div>
           ${e.reason ? `<p class="treason">${esc(e.reason)}</p>` : ''}
           ${e.items.length > 1 ? `<div class="ttools"><button class="linkbtn" data-tall="${key}" data-on="1">${t('Tout cocher')}</button><button class="linkbtn" data-tall="${key}" data-on="0">${t('Tout décocher')}</button></div>` : ''}
           <div class="tlist">${rows}</div>
+          ${e.items.some(x => x.sensitive) ? `<label class="tstrong" hidden><input type="checkbox" data-tstrong="${key}"${TRASH_ACK.has(key) ? ' checked' : ''}> ${t('Données d’applications cochées : j’ai vérifié et je veux vraiment les supprimer')}</label>` : ''}
           <div class="tbtns"><button class="btn danger sm tgo" data-confirm="${e.i}" data-chat="${m.chat}" data-accept="1"></button>
           <button class="btn sm" data-confirm="${e.i}" data-chat="${m.chat}" data-accept="0">${t('Non')}</button></div></div></div>`;
       }
@@ -610,10 +629,12 @@ function updateTrashCard(card) {
   card.querySelector('.tsize').textContent = fmtSize(total);
   const go = card.querySelector('.tgo');
   go.textContent = on.length > 1 ? t('Mettre {n} éléments à la corbeille', { n: on.length }) : t('Mettre à la corbeille');
-  go.disabled = !on.length;
+  const strong = card.querySelector('.tstrong'), sens = on.some(b => b.dataset.sens);
+  if (strong) strong.hidden = !sens;
+  go.disabled = !on.length || (sens && !strong.querySelector('input').checked);
 }
 const flash = el => { if (!el) return; el.classList.remove('ai-flash'); void el.offsetWidth; el.classList.add('ai-flash'); };
-function setTabSilently(tab) { S.tab = tab; for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === tab); }
+function setTabSilently(tab) { S.tab = tab; markTab(tab); }
 
 let chatPoll = null;
 async function sendChat(text) {
@@ -669,7 +690,7 @@ async function stopChat() {
 
 function openLink(a) {
   const id = +a.dataset.id, parent = +a.dataset.parent;
-  if (S.tab !== 'content') { S.tab = 'content'; for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === 'content'); }
+  if (S.tab !== 'content') { S.tab = 'content'; markTab('content'); }
   if (a.dataset.dir === '1') navigate(id); else navigate(parent, id);
 }
 
@@ -767,8 +788,9 @@ window.addEventListener('focus', async () => {
 });
 
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-connect],[data-cancel-login],[data-code-submit],[data-logout],[data-ext],[data-accounts],#aiModalClose');
-  if (!t && e.target.id === 'aiModal') return closeAccounts();
+  const target = /** @type {HTMLElement} */ (e.target);
+  const t = /** @type {HTMLElement | null} */ (target.closest('[data-connect],[data-cancel-login],[data-code-submit],[data-logout],[data-ext],[data-accounts],#aiModalClose'));
+  if (!t && target.id === 'aiModal') return closeAccounts();
   if (!t) return;
   e.preventDefault();
   try {
@@ -781,13 +803,15 @@ document.addEventListener('click', async e => {
     if (t.dataset.ext) return post('/api/external', { url: t.dataset.ext });
   } catch (err) { toast(esc(err.message), 'err'); }
 });
-document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'loginCode') submitCode(e.target.value); });
+document.addEventListener('keydown', e => { const el = /** @type {HTMLInputElement} */ (e.target); if (e.key === 'Enter' && el.id === 'loginCode') submitCode(el.value); });
 
 $('#chatForm').addEventListener('submit', e => { e.preventDefault(); chatBusy ? stopChat() : sendChat($('#chatInput').value); });
 $('#chatInput').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(e.target.value); }
 });
 $('#chatMsgs').addEventListener('change', e => {
+  const ack = e.target.closest('input[data-tstrong]');
+  if (ack) { ack.checked ? TRASH_ACK.add(ack.dataset.tstrong) : TRASH_ACK.delete(ack.dataset.tstrong); return updateTrashCard(ack.closest('.tcard')); }
   const b = e.target.closest('input[data-tpick]'); if (!b) return;
   const off = TRASH_OFF.get(b.dataset.tpick) || new Set();
   b.checked ? off.delete(b.dataset.path) : off.add(b.dataset.path);
@@ -803,9 +827,10 @@ $('#chatMsgs').addEventListener('click', async e => {
   const c = e.target.closest('[data-confirm]');
   if (c) {
     const card = c.closest('.tcard');
-    const paths = [...card.querySelectorAll('input[data-tpick]')].filter(b => b.checked).map(b => b.dataset.path);
+    const on = [...card.querySelectorAll('input[data-tpick]')].filter(b => b.checked), paths = on.map(b => b.dataset.path);
+    const confirmSensitive = card.querySelector('input[data-tstrong]')?.checked ? on.filter(b => b.dataset.sens).map(b => b.dataset.path) : [];
     for (const b of card.querySelectorAll('button, input')) b.disabled = true;
-    try { await post('/api/chat/confirm', { chat: c.dataset.chat, event: +c.dataset.confirm, accept: c.dataset.accept === '1', paths }); } catch (err) { toast(esc(err.message), 'err'); }
+    try { await post('/api/chat/confirm', { chat: c.dataset.chat, event: +c.dataset.confirm, accept: c.dataset.accept === '1', paths, confirmSensitive }); } catch (err) { toast(esc(err.message), 'err'); }
     return;
   }
   const q = e.target.closest('[data-q]'); if (q) return sendChat(q.dataset.q);
@@ -824,7 +849,7 @@ async function startScan(p) {
     S.sel.clear(); updateSelBar();
     S.root = { id: r.id, path: p };
     show('app');
-    S.tab = 'content'; for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === 'content');
+    S.tab = 'content'; markTab('content');
     S.wasScanning = true;
     await navigate(r.id);
     poll(true);
@@ -874,14 +899,14 @@ function renderWelcome(st) {
   $('#hint').innerHTML = HINT;
 }
 function applyPlatformLabels() {
-  for (const el of document.querySelectorAll('[data-icon]')) el.insertAdjacentHTML('afterbegin', svg(el.dataset.icon));
+  for (const el of document.querySelectorAll('[data-icon]')) el.insertAdjacentHTML('afterbegin', svg(/** @type {HTMLElement} */ (el).dataset.icon));
   applyI18n();
   $('#finderBtn').textContent = FM; $('#finderBtn').title = t('Ouvrir dans le {fm}', { fm: FM });
   $('#trashBtn').innerHTML = `${t('Mettre à la corbeille')} <kbd>${TRASH_KEY}</kbd>`;
   $('.keyhint').textContent = t('↑↓ naviguer · → ouvrir · ← remonter · Espace aperçu · {mod}/⇧clic sélection · {del} corbeille', { mod: IS_MAC ? '⌘' : 'Ctrl', del: TRASH_KEY });
   $('#pickBtn').hidden = !IS_APP;
 }
-window.taupe = { pick: pickFolder, rescan: () => !$('#app').hidden && $('#rescanBtn').click(), toggleChat: () => $('#chatToggle').click() };
+/** @type {any} */ (window).taupe = { pick: pickFolder, rescan: () => !$('#app').hidden && $('#rescanBtn').click(), toggleChat: () => $('#chatToggle').click() };
 $('#logo').addEventListener('click', e => { e.preventDefault(); if (S.root) { show('app'); navigate(S.root.id); } else show('welcome'); });
 $('#cancelBtn').addEventListener('click', () => post('/api/cancel'));
 $('#upBtn').addEventListener('click', goUp);
@@ -943,7 +968,7 @@ $('#suggestView').addEventListener('click', async e => {
     try { await post('/api/ai/start', { id: S.cur, provider, lang: LANG }); } catch (err) { return toast(esc(err.message), 'err'); }
     return refreshAI();
   }
-  if (t.dataset.copy != null) { navigator.clipboard.writeText(t.dataset.copy).then(() => toast(t('Commande copiée'), 'ok', 2000)); return; }
+  if (t.dataset.copy != null) { navigator.clipboard.writeText(t.dataset.copy).then(() => toast(`${t('Commande copiée')}<br><span class="muted small">${t('Relis-la avant de la coller dans un terminal.')}</span>`, 'ok', 4000)); return; }
   if (t.hasAttribute('data-selsafe')) return selectItems(AI.job.result.items.filter(x => x.risk === 'safe' && x.action === 'trash'));
   const grp = t.closest('.sgroup');
   if (t.hasAttribute('data-more') && grp) { const k = grp.dataset.key; expanded.has(k) ? expanded.delete(k) : expanded.add(k); return renderRules(RULES); }
@@ -974,16 +999,18 @@ $('#selClear').addEventListener('click', () => {
 $('#trashBtn').addEventListener('click', askTrash);
 $('#mCancel').addEventListener('click', closeModal);
 $('#mOk').addEventListener('click', doTrash);
+$('#mStrongOk').addEventListener('change', e => { $('#mOk').disabled = !e.target.checked; });
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
 
 document.addEventListener('keydown', e => {
+  const target = /** @type {HTMLElement} */ (e.target);
   if (!$('#aiModal').hidden) { if (e.key === 'Escape') closeAccounts(); return; }
   if (!$('#modal').hidden) {
     if (e.key === 'Escape') closeModal();
-    else if (e.key === 'Enter') { e.preventDefault(); doTrash(); }
+    else if (e.key === 'Enter' && target.id !== 'mStrongOk') { e.preventDefault(); doTrash(); }
     return;
   }
-  if ($('#app').hidden || e.target.matches('input:not([type=checkbox]), textarea, select')) return;
+  if ($('#app').hidden || target.matches('input:not([type=checkbox]), textarea, select')) return;
   const r = S.view[S.focus], meta = e.metaKey || e.ctrlKey;
   const k = e.key;
   if (k === 'ArrowDown' && !meta) { e.preventDefault(); setFocus(Math.min(S.focus + 1, S.view.length - 1)); }

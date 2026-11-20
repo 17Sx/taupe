@@ -71,7 +71,7 @@ Demande-lui par exemple « trouve tous les node_modules et sélectionne-les » o
 - **ouvrir** un dossier dans Taupe et **cocher** des éléments ;
 - **proposer une mise à la corbeille** : une carte de confirmation s'affiche, et rien n'est supprimé tant que tu n'as pas cliqué.
 
-Chaque action s'affiche en direct dans l'assistant, avec une animation. Techniquement, Taupe expose ces outils à Claude Code / Codex via un petit serveur [MCP](https://modelcontextprotocol.io) local (`src/mcp.mjs`). L'IA n'a accès à aucun autre outil : pas de shell, pas de lecture de fichiers.
+Chaque action s'affiche en direct dans l'assistant, avec une animation. Techniquement, Taupe expose ces outils à Claude Code / Codex via un petit serveur [MCP](https://modelcontextprotocol.io) local (`src/mcp.mjs`). L'IA n'a accès à aucun autre outil : pas de shell, pas de lecture de fichiers (les outils intégrés de Claude Code et les outils de commande de Codex sont désactivés, voir [SECURITY.md](SECURITY.md)). ChatGPT demande un Codex CLI récent (`npm install -g @openai/codex`).
 
 **Confidentialité** : l'IA reçoit uniquement des **chemins, tailles et dates**, jamais le contenu de tes fichiers. Elle ne peut rien supprimer : c'est toujours toi qui coches puis confirmes.
 
@@ -94,7 +94,7 @@ Il faut Node.js 20 ou plus récent.
 npm install
 npm start            # lance l'application (Electron)
 npm test             # tests du moteur
-npm run check        # vérification de syntaxe
+npm run check        # syntaxe, ESLint, tsc --checkJs
 npm run dist:mac     # construit le .dmg (sur macOS)
 npm run dist:win     # construit l'installeur .exe (sur Windows)
 ```

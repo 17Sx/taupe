@@ -80,6 +80,12 @@ const EN = {
   '{n} suggestion': '{n} suggestion', '{n} suggestions': '{n} suggestions',
   'Sélectionner les {n} « sans risque » ({size})': 'Select the {n} “safe” ones ({size})',
   'Copier': 'Copy', 'Commande copiée': 'Command copied',
+  'Commande proposée par l’IA : vérifie-la avant de l’exécuter.': 'Command suggested by the AI: check it before running it.',
+  'Relis-la avant de la coller dans un terminal.': 'Read it again before pasting it into a terminal.',
+  'Ces éléments sont des données d’applications (réglages, comptes, historiques…). Les supprimer peut faire perdre des données ou empêcher une application de fonctionner.': 'These items are app data (settings, accounts, histories…). Deleting them can lose data or stop an app from working.',
+  'J’ai vérifié chaque élément et je veux vraiment les mettre à la corbeille': 'I checked every item and really want to move them to the Trash',
+  'données d’app': 'app data',
+  'Données d’applications cochées : j’ai vérifié et je veux vraiment les supprimer': 'App data checked: I verified it and really want to delete it',
   'Aucune suggestion exploitable.': 'No usable suggestion.',
   'Connecte ton abonnement Claude ou ChatGPT pour obtenir une liste triée de ce que tu peux supprimer, avec le niveau de risque. L’IA ne voit que les noms, tailles et dates — jamais le contenu de tes fichiers.':
     'Connect your Claude or ChatGPT subscription to get a sorted list of what you can delete, with a risk level. The AI only sees names, sizes and dates — never the contents of your files.',
@@ -170,6 +176,6 @@ function tn(n, one, many, v = {}) {
 function applyI18n(root = document) {
   if (LANG === 'fr') return;
   for (const el of root.querySelectorAll('[data-t]')) el.innerHTML = t(el.innerHTML.trim());
-  for (const el of root.querySelectorAll('[data-t-title]')) el.title = t(el.title);
-  for (const el of root.querySelectorAll('[data-t-ph]')) el.placeholder = t(el.placeholder);
+  for (const el of root.querySelectorAll('[data-t-title]')) { const h = /** @type {HTMLElement} */ (el); h.title = t(h.title); }
+  for (const el of root.querySelectorAll('[data-t-ph]')) { const i = /** @type {HTMLInputElement} */ (el); i.placeholder = t(i.placeholder); }
 }

@@ -56,7 +56,7 @@ async function callTaupe(name, args) {
     headers: { 'content-type': 'application/json', 'x-token': TAUPE_TOKEN },
     body: JSON.stringify({ chat: TAUPE_CHAT, name, args }),
   });
-  const j = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+  const j = /** @type {any} */ (await r.json().catch(() => ({ error: `HTTP ${r.status}` })));
   if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
   return j;
 }

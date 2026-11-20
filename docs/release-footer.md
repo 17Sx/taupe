@@ -15,3 +15,5 @@
 `xattr -cr /Applications/Taupe.app`
 
 **Windows** — SmartScreen may show "Windows protected your PC": click **More info → Run anyway**.
+
+**Check your download** — `SHA256SUMS.txt` lists the SHA-256 of every file. macOS / Linux: `shasum -a 256 -c SHA256SUMS.txt --ignore-missing` · Windows (PowerShell): `Get-FileHash .\Taupe-…-setup.exe` and compare with the matching line.

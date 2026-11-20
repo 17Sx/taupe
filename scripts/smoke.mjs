@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { startServer } from '../src/server.mjs';
-import { isProtected, HOME, IS_WIN, IS_MAC, fallbackActions } from '../src/platform.mjs';
+import { isProtected, isSensitive, HOME, IS_WIN, IS_MAC, fallbackActions } from '../src/platform.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'taupe-smoke-'));
 const mk = (rel, bytes) => { const p = path.join(tmp, ...rel.split('/')); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, Buffer.alloc(bytes, 1)); return p; };
@@ -22,7 +22,7 @@ const html = await (await fetch(url)).text();
 const token = html.match(/name="token" content="([^"]+)"/)[1];
 const call = async (method, p, body) => {
   const r = await fetch(url + p.replace(/^\//, ''), { method, headers: { 'x-token': token, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });
-  const j = await r.json();
+  const j = /** @type {any} */ (await r.json());
   if (!r.ok) throw new Error(`${p} → ${r.status} ${j.error}`);
   return j;
 };
@@ -33,6 +33,25 @@ try {
   await step('sécurité : refuse sans jeton', async () => {
     const r = await fetch(url + 'api/status');
     assert.equal(r.status, 403);
+  });
+
+  await step('mode application : le jeton n’est pas dans la page', async () => {
+    const appSrv = await startServer({ port: 0, app: true });
+    try {
+      const page = await (await fetch(appSrv.url)).text();
+      assert.ok(!page.includes(appSrv.token), 'jeton présent dans le HTML');
+      assert.match(page, /name="token" content=""/);
+      const r = await fetch(appSrv.url + 'api/status', { headers: { 'x-token': appSrv.token } });
+      assert.equal(r.status, 200);
+    } finally { appSrv.close(); }
+  });
+
+  await step('validation : clés héritées refusées (__proto__, constructor…)', async () => {
+    const raw = (p, body) => fetch(url + p, { method: 'POST', headers: { 'x-token': token, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    for (const provider of ['__proto__', 'constructor', 'toString', 'claude; touch /tmp/x']) {
+      assert.equal((await raw('api/ai/logout', { provider })).status, 400, provider);
+      assert.equal((await raw('api/ai/connect', { provider })).status, 400, provider);
+    }
   });
 
   await step('scan de l’arborescence', async () => {
@@ -61,6 +80,31 @@ try {
     assert.ok(isProtected(IS_WIN ? 'C:\\' : '/'));
     assert.ok(isProtected(IS_WIN ? 'C:\\Windows\\System32' : '/usr/bin'));
     assert.ok(!isProtected(victim));
+    // secrets, whatever the depth
+    for (const p of ['.ssh', '.ssh/id_ed25519', '.aws/credentials', '.gnupg', '.kube/config']) assert.ok(isProtected(path.join(HOME, ...p.split('/'))), p);
+    // case-insensitive disks (macOS, Windows)
+    if (IS_MAC || IS_WIN) {
+      assert.ok(isProtected(path.join(HOME, 'DOCUMENTS')));
+      assert.ok(isProtected(path.join(HOME.toUpperCase(), 'Downloads')));
+      assert.ok(isProtected(path.join(HOME, '.SSH', 'config')));
+    }
+    // a symlink in a parent folder does not hide a protected folder…
+    if (!IS_WIN) {
+      const link = path.join(tmp, 'lien-maison');
+      fs.symlinkSync(HOME, link);
+      try {
+        assert.ok(isProtected(path.join(link, 'Documents')), 'contourné par un lien symbolique');
+        assert.ok(isProtected(path.join(link, '.ssh', 'x')));
+        assert.ok(!isProtected(link), 'le lien lui-même part seul à la corbeille');
+      } finally { fs.unlinkSync(link); }
+    }
+    // app data: allowed only after a reinforced confirmation
+    if (IS_MAC) {
+      assert.ok(isSensitive(path.join(HOME, 'Library', 'Caches', 'x')));
+      assert.ok(isSensitive(path.join(HOME, 'library', 'Application Support', 'x')));
+      assert.ok(isProtected(path.join(HOME, 'Library', 'Keychains', 'login.keychain-db')));
+    }
+    assert.ok(!isSensitive(victim));
   });
 
   await step('refus si le chemin ne correspond pas', async () => {

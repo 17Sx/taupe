@@ -65,9 +65,9 @@ function pool(start, worker, conc) {
     const pump = () => {
       while (running < conc && q.length) {
         running++;
-        worker(q.pop(), push).then(() => { running--; if (!q.length && !running) resolve(); else pump(); });
+        worker(q.pop(), push).then(() => { running--; if (!q.length && !running) resolve(undefined); else pump(); });
       }
-      if (!q.length && !running) resolve();
+      if (!q.length && !running) resolve(undefined);
     };
     pump();
   });
@@ -191,10 +191,10 @@ export class Session {
 
   _dir(ctx, store, job, push) {
     return new Promise(resolve => {
-      if (ctx.cancelled) return resolve();
+      if (ctx.cancelled) return resolve(undefined);
       fs.readdir(job.path, (err, names) => {
-        if (err) { store.flags[job.id] |= F_ERR; ctx.errors++; return resolve(); }
-        if (ctx.cancelled || !names.length) return resolve();
+        if (err) { store.flags[job.id] |= F_ERR; ctx.errors++; return resolve(undefined); }
+        if (ctx.cancelled || !names.length) return resolve(undefined);
         ctx.current = job.path;
         const base = job.path.endsWith(path.sep) ? job.path : job.path + path.sep;
         let left = names.length, sumS = 0, sumC = 0;
@@ -218,7 +218,7 @@ export class Session {
                 sumS += size; sumC++; ctx.files++;
               }
             }
-            if (--left === 0) { store.bump(job.id, sumS, sumC); resolve(); }
+            if (--left === 0) { store.bump(job.id, sumS, sumC); resolve(undefined); }
           });
         }
       });

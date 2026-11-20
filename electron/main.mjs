@@ -1,7 +1,7 @@
 // Main process of the Taupe desktop app (Electron).
 // The engine (scan + local API) runs in a separate utility process (worker.mjs) so the window stays
 // smooth; it asks this process for native actions: Trash, Finder/Explorer, Quick Look, folder picker.
-import { app, BrowserWindow, Menu, shell, dialog, utilityProcess, nativeTheme } from 'electron';
+import { app, BrowserWindow, Menu, shell, dialog, utilityProcess, nativeTheme, session } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -95,8 +95,8 @@ function startWorker() {
       stdio: 'inherit',
     });
     worker.on('message', async msg => {
-      if (msg?.type === 'ready') { clearTimeout(timeout); return resolve(msg.url); }
-      if (msg?.type === 'action' && ACTIONS[msg.name]) {
+      if (msg?.type === 'ready') { clearTimeout(timeout); return resolve(msg); }
+      if (msg?.type === 'action' && typeof msg.name === 'string' && Object.hasOwn(ACTIONS, msg.name)) {
         let result = null, error = null;
         try { result = await ACTIONS[msg.name](...msg.args); } catch (e) { error = e.message; }
         worker.postMessage({ type: 'result', id: msg.id, result: result ?? null, error });
@@ -131,8 +131,9 @@ function createWindow() {
 const ui = js => () => win?.webContents.executeJavaScript(`window.taupe && window.taupe.${js}`).catch(() => {});
 function buildMenu() {
   const radio = (items, current, onPick) => items.map(([id, label]) => ({ label, type: 'radio', checked: current === id, click: () => onPick(id) }));
+  /** @type {Electron.MenuItemConstructorOptions[]} */
   const template = [
-    ...(IS_MAC ? [{ role: 'appMenu' }] : []),
+    ...(IS_MAC ? [/** @type {const} */ ({ role: 'appMenu' })] : []),
     { label: T('file'), submenu: [
       { label: T('scan'), accelerator: 'CmdOrCtrl+O', click: ui('pick()') },
       { label: T('rescan'), accelerator: 'CmdOrCtrl+Shift+R', click: ui('rescan()') },
@@ -148,7 +149,7 @@ function buildMenu() {
       { role: 'resetZoom', label: T('reset') }, { role: 'zoomIn', label: T('zoomIn') }, { role: 'zoomOut', label: T('zoomOut') },
       { type: 'separator' },
       { role: 'togglefullscreen', label: T('fullscreen') },
-      ...(app.isPackaged ? [] : [{ type: 'separator' }, { role: 'reload' }, { role: 'toggleDevTools' }]),
+      ...(app.isPackaged ? [] : /** @type {const} */ ([{ type: 'separator' }, { role: 'reload' }, { role: 'toggleDevTools' }])),
     ] },
     { role: 'windowMenu', label: T('window') },
     { role: 'help', label: T('help'), submenu: [
@@ -167,7 +168,14 @@ app.on('before-quit', () => { quitting = true; worker?.kill(); });
 app.whenReady().then(async () => {
   if (['light', 'dark'].includes(settings.theme)) nativeTheme.themeSource = settings.theme;
   buildMenu();
-  try { serverUrl = await startWorker(); }
+  let token;
+  try { ({ url: serverUrl, token } = await startWorker()); }
   catch (e) { dialog.showErrorBox('Taupe', T('engineFail', { msg: e.message })); app.quit(); return; }
+  // Anti-CSRF token: added to the window's requests to the engine, never written into the page,
+  // so a local process that reads http://127.0.0.1:<port>/ does not get it.
+  session.defaultSession.webRequest.onBeforeSendHeaders((d, cb) => {
+    if (d.url.startsWith(serverUrl)) d.requestHeaders['x-token'] = token;
+    cb({ requestHeaders: d.requestHeaders });
+  });
   createWindow();
 });

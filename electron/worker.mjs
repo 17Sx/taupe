@@ -20,6 +20,8 @@ const call = name => (...args) => new Promise((resolve, reject) => {
   port.postMessage({ type: 'action', id, name, args });
 });
 
+/** @type {any} */
 const actions = Object.fromEntries(['trash', 'reveal', 'open', 'quicklook', 'openExternal', 'pickFolder'].map(n => [n, call(n)]));
-const { url } = await startServer({ port: 0, actions, app: true, version: process.env.TAUPE_VERSION || '' });
-port.postMessage({ type: 'ready', url });
+// The token never goes into the page: the main process adds it to the window's requests
+const { url, token } = await startServer({ port: 0, actions, app: true, version: process.env.TAUPE_VERSION || '' });
+port.postMessage({ type: 'ready', url, token });
