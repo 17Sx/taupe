@@ -49,11 +49,18 @@ const PROTECTED_PREFIX = withReal((IS_WIN
   : ['/System/', '/usr/', '/bin/', '/sbin/', '/boot/', '/proc/', '/sys/', '/dev/']
 ).map(x => x.replace(/[\\/]$/, '')).concat(SECRETS)).map(x => fold(x + path.sep));
 
-// Absolute path with the symlinks of its parent folders resolved (the last component is kept as is)
+// Absolute path with the symlinks of its parent folders resolved (the last component is kept as is).
+// Resolves the deepest parent that exists: "<link to ~>/.kube/x" is "~/.kube/x" even without ~/.kube.
 function realParent(p) {
-  const abs = path.resolve(p), base = path.basename(abs);
-  if (!base) return abs; // root of a disk
-  try { return path.join(fs.realpathSync.native(path.dirname(abs)), base); } catch { return abs; }
+  const abs = path.resolve(p);
+  const rest = [path.basename(abs)];
+  if (!rest[0]) return abs; // root of a disk
+  for (let dir = path.dirname(abs); ;) {
+    try { return path.join(fs.realpathSync.native(dir), ...rest); } catch {}
+    const up = path.dirname(dir);
+    if (up === dir) return abs;
+    rest.unshift(path.basename(dir)); dir = up;
+  }
 }
 function protectedAs(p) {
   const n = fold(p);
@@ -65,7 +72,10 @@ export const isProtected = p => protectedAs(path.resolve(p)) || protectedAs(real
 
 // Allowed, but only after a reinforced confirmation: app data (settings, accounts, histories…)
 const SENSITIVE_PREFIX = withReal(IS_MAC ? [H('Library')] : IS_WIN ? [H('AppData')] : [H('.config'), H('.local', 'share')]).map(x => fold(x + path.sep));
-export const isSensitive = p => [path.resolve(p), realParent(p)].some(x => SENSITIVE_PREFIX.some(s => fold(x).startsWith(s)));
+// …except the temporary folder: on Windows %TEMP% lives in AppData\Local\Temp, and it is safe to empty
+const TEMP = withReal([os.tmpdir()]).map(fold);
+const inTemp = f => TEMP.some(t => f === t || f.startsWith(t + path.sep));
+export const isSensitive = p => [path.resolve(p), realParent(p)].map(fold).some(f => SENSITIVE_PREFIX.some(s => f.startsWith(s)) && !inTemp(f));
 
 export function expand(p) {
   p = String(p ?? '').trim();
