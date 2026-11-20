@@ -72,6 +72,7 @@ const SVG = {
   gear: '<circle cx="8" cy="8" r="2"/><path d="M8 1.75v1.6M8 12.65v1.6M14.25 8h-1.6M3.35 8h-1.6M12.4 3.6l-1.15 1.15M4.75 11.25L3.6 12.4M12.4 12.4l-1.15-1.15M4.75 4.75L3.6 3.6"/>',
   reset: '<path d="M2.75 8a5.25 5.25 0 1 0 1.55-3.7"/><path d="M4.1 1.9v2.6h2.6"/>',
   close: '<path d="M4 4l8 8M12 4l-8 8"/>',
+  check: '<path d="M3.25 8.4l3 3 6.5-6.8"/>',
   sparkle: '<path d="M8 1.75l1.4 4.85L14.25 8 9.4 9.4 8 14.25 6.6 9.4 1.75 8 6.6 6.6z"/>',
   trash: '<path d="M2.75 4.25h10.5M6.25 4.25V2.75h3.5v1.5M4 4.25l.65 9.25h6.7L12 4.25"/>',
   search: '<circle cx="7" cy="7" r="4.25"/><path d="M10.25 10.25l3.5 3.5"/>',
@@ -749,6 +750,7 @@ async function loadProviders(refresh) {
     if (changed && !typing) {
       if (!chatBusy) renderChat();
       if (!$('#aiModal').hidden) renderAccounts();
+      if (!$('#onb').hidden && onbKey() === 'ai') renderOnboarding();
       if (S.tab === 'suggest' && AI) renderAI({ ...AI, providers: PROVS });
     }
     clearTimeout(loginTimer);
@@ -906,7 +908,101 @@ function applyPlatformLabels() {
   $('.keyhint').textContent = t('↑↓ naviguer · → ouvrir · ← remonter · Espace aperçu · {mod}/⇧clic sélection · {del} corbeille', { mod: IS_MAC ? '⌘' : 'Ctrl', del: TRASH_KEY });
   $('#pickBtn').hidden = !IS_APP;
 }
-/** @type {any} */ (window).taupe = { pick: pickFolder, rescan: () => !$('#app').hidden && $('#rescanBtn').click(), toggleChat: () => $('#chatToggle').click() };
+// ---------- Onboarding (first launch, then Help → Show the Welcome Tour) ----------
+// Steps: welcome → Full Disk Access (macOS app only) → AI assistant (optional) → first scan.
+// Progress is kept in localStorage (the app keeps the same port, hence the same origin, between launches).
+const ONB_STEPS = ['hello', ...(IS_MAC && IS_APP ? ['disk'] : []), 'ai', 'go'];
+let onbI = 0, onbFDA = null, onbTimer = null;
+const onbKey = () => ONB_STEPS[onbI];
+const onbIcon = k => `<i class="onb-ic">${svg(k)}</i>`;
+function openOnboarding(at = 0) {
+  onbI = Math.max(0, Math.min(ONB_STEPS.length - 1, at));
+  $('#onb').hidden = false;
+  renderOnboarding();
+  $('#onbNext').focus();
+}
+function closeOnboarding() {
+  $('#onb').hidden = true; clearTimeout(onbTimer);
+  lsSet('taupe.onboard', 'done');
+}
+function onbGo(d) {
+  onbI = Math.max(0, Math.min(ONB_STEPS.length - 1, onbI + d));
+  lsSet('taupe.onboard', onbKey()); // resume here if macOS relaunches Taupe (Full Disk Access)
+  renderOnboarding();
+  $('#onbNext').focus();
+}
+async function checkFDA() {
+  clearTimeout(onbTimer);
+  if (onbKey() !== 'disk' || $('#onb').hidden) return;
+  try { const v = (await get('/api/privacy')).fullDiskAccess; if (v !== onbFDA) { onbFDA = v; renderOnboarding(); } } catch {}
+  onbTimer = setTimeout(checkFDA, 2000);
+}
+function renderOnboarding() {
+  if ($('#onb').hidden || document.activeElement?.id === 'loginCode') return;
+  const k = onbKey(), last = onbI === ONB_STEPS.length - 1;
+  let html, next;
+  if (k === 'hello') {
+    html = `<div class="onb-hero">${$('.logo-paw')?.outerHTML || ''}</div>
+      <h2 id="onbTitle">${t('Bienvenue dans Taupe')}</h2>
+      <p class="onb-lead">${t('Trouve ce qui remplit ton disque et fais le ménage, sans mauvaise surprise.')}</p>
+      <ul class="onb-list">
+        <li>${onbIcon('disk')}<div><b>${t('Tout voir d’un coup d’œil')}</b><span>${t('Carte des dossiers, plus gros fichiers, répartition par type : en quelques secondes, même pour un disque entier.')}</span></div></li>
+        <li>${onbIcon('trash')}<div><b>${t('Rien ne part sans toi')}</b><span>${t('Tout passe par la Corbeille. Les dossiers système, tes dossiers principaux et tes clés (.ssh…) sont protégés.')}</span></div></li>
+        <li>${onbIcon('sparkle')}<div><b>${t('Un assistant, si tu veux')}</b><span>${t('Claude ou ChatGPT, avec ton abonnement. Il ne voit que les noms, tailles et dates — jamais le contenu de tes fichiers.')}</span></div></li>
+      </ul>`;
+    next = t('Commencer');
+  } else if (k === 'disk') {
+    const ok = onbFDA === true;
+    html = `<h2 id="onbTitle">${t('Laisse Taupe tout voir')}</h2>
+      <p class="onb-lead">${t('macOS cache certains dossiers (Mail, Messages, Photos, données d’apps…). Sans l’<b>Accès complet au disque</b>, Taupe ne peut pas les mesurer et sous-estime ce qui prend de la place.')}</p>
+      <div class="onb-state ${ok ? 'ok' : ''}">${ok ? `${svg('check')} ${t('Accès complet au disque activé')}` : `<span class="spin"></span> ${t('En attente de l’autorisation…')}`}</div>
+      ${ok ? '' : `<ol class="onb-steps">
+        <li><span>${t('Ouvre les Réglages au bon endroit')}</span><button class="btn sm" data-privacy>${t('Ouvrir les Réglages')}</button></li>
+        <li><span>${t('Active <b>Taupe</b> dans la liste (sinon : « + », puis Applications → Taupe).')}</span></li>
+        <li><span>${t('Si macOS propose de <b>quitter et rouvrir</b> Taupe, accepte : tu reviendras ici.')}</span></li>
+      </ol>`}
+      <p class="onb-note">${t('Taupe ne lit jamais le contenu de tes fichiers : seulement leurs noms, tailles et dates.')}</p>`;
+    next = ok ? t('Continuer') : t('Plus tard');
+  } else if (k === 'ai') {
+    const prov = (key, plans) => {
+      const p = PROVS?.[key], on = ready(p);
+      return `<div class="onb-prov${on ? ' on' : ''}"><div class="onb-provh"><b>${NAME[key]}</b><span class="muted small">${plans}</span><span class="grow"></span>
+        <span class="onb-pill">${!PROVS ? '…' : on ? `${svg('check')} ${t('Connecté')}` : p?.installed ? t('Non connecté') : t('Non installé')}</span></div>
+        ${on ? (p.detail ? `<p class="muted small">${esc(t(p.detail))}</p>` : '') : PROVS ? connectBlock(key) : ''}</div>`;
+    };
+    html = `<h2 id="onbTitle">${t('Ton assistant IA')} <span class="tag">${t('facultatif')}</span></h2>
+      <p class="onb-lead">${t('Pose des questions sur tes dossiers et laisse-le trier pour toi. Il utilise ton abonnement : pas de clé API, pas de frais en plus.')}</p>
+      <div class="onb-provs">${prov('claude', 'Pro · Max')}${prov('codex', 'Plus · Pro')}</div>
+      <p class="onb-note">${t('Il te faut l’outil officiel (Claude Code ou Codex) : s’il manque, Taupe l’installe pour toi, rien d’autre à installer. La connexion se fait ensuite dans ton navigateur.')}</p>`;
+    next = anyReady() ? t('Continuer') : t('Plus tard');
+  } else {
+    const cards = (S.status?.places || []).map(p => `<button class="card" data-onb-path="${esc(p.path)}"><b>${esc(p.label)}</b><small>${esc(p.hint)}</small></button>`);
+    if (IS_APP) cards.push(`<button class="card" data-onb-pick="1"><b>${t('Choisir un dossier…')}</b><small>${MOD}O</small></button>`);
+    html = `<h2 id="onbTitle">${t('C’est parti')}</h2>
+      <p class="onb-lead">${t('Choisis quoi analyser. Le dossier perso est souvent le plus parlant.')}</p>
+      <div class="cards onb-cards">${cards.join('')}</div>
+      <div class="onb-keys"><span><kbd>${t('Espace')}</kbd> ${t('aperçu')}</span><span><kbd>${TRASH_KEY}</kbd> ${t('corbeille')}</span><span><kbd>${MOD}J</kbd> ${t('assistant')}</span><span><kbd>${MOD}O</kbd> ${t('autre dossier')}</span></div>`;
+    next = t('Terminer');
+  }
+  $('#onbBody').innerHTML = html;
+  $('#onbBody').dataset.step = k;
+  $('#onbDots').innerHTML = ONB_STEPS.map((_, i) => `<i class="${i === onbI ? 'on' : i < onbI ? 'done' : ''}"></i>`).join('');
+  $('#onbBack').hidden = onbI === 0;
+  $('#onbSkip').hidden = last;
+  $('#onbNext').textContent = next;
+  if (k === 'disk' && !onbTimer) checkFDA();
+  if (k !== 'disk') { clearTimeout(onbTimer); onbTimer = null; }
+}
+$('#onbNext').addEventListener('click', () => (onbI === ONB_STEPS.length - 1 ? closeOnboarding() : onbGo(1)));
+$('#onbBack').addEventListener('click', () => onbGo(-1));
+$('#onbSkip').addEventListener('click', closeOnboarding);
+$('#onb').addEventListener('click', async e => {
+  const target = /** @type {HTMLElement} */ (e.target);
+  if (target.closest('[data-privacy]')) { try { await post('/api/privacy/open'); } catch (err) { toast(esc(err.message), 'err'); } return; }
+  const card = /** @type {HTMLElement | null} */ (target.closest('[data-onb-path],[data-onb-pick]'));
+  if (card) { closeOnboarding(); return card.dataset.onbPick ? pickFolder() : startScan(card.dataset.onbPath); }
+});
+/** @type {any} */ (window).taupe = { onboarding: () => openOnboarding(0), pick: pickFolder, rescan: () => !$('#app').hidden && $('#rescanBtn').click(), toggleChat: () => $('#chatToggle').click() };
 $('#logo').addEventListener('click', e => { e.preventDefault(); if (S.root) { show('app'); navigate(S.root.id); } else show('welcome'); });
 $('#cancelBtn').addEventListener('click', () => post('/api/cancel'));
 $('#upBtn').addEventListener('click', goUp);
@@ -1004,6 +1100,11 @@ $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeM
 
 document.addEventListener('keydown', e => {
   const target = /** @type {HTMLElement} */ (e.target);
+  if (!$('#onb').hidden) {
+    if (e.key === 'Escape') closeOnboarding();
+    else if (e.key === 'Enter' && !target.closest('input, button, textarea')) { e.preventDefault(); $('#onbNext').click(); }
+    return;
+  }
   if (!$('#aiModal').hidden) { if (e.key === 'Escape') closeAccounts(); return; }
   if (!$('#modal').hidden) {
     if (e.key === 'Escape') closeModal();
@@ -1034,5 +1135,8 @@ document.addEventListener('keydown', e => {
   if (S.status) renderWelcome(S.status);
   if (S.root) { show('app'); $('#pathInput').value = pretty(S.root.path); await navigate(S.root.id); }
   else show('welcome');
+  // First launch (or interrupted tour, e.g. macOS relaunched Taupe for Full Disk Access): show the onboarding
+  const onb = lsGet('taupe.onboard');
+  if (onb !== 'done' && !S.root) openOnboarding(Math.max(0, ONB_STEPS.indexOf(onb)));
   if (!S.wasScanning) poll();
 })();

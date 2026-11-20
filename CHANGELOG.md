@@ -4,6 +4,12 @@ All notable changes to Taupe are documented in this file. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **Onboarding** on first launch, reopenable from Help → Show the Welcome Tour: what Taupe does and how it protects your files; on macOS, **Full Disk Access** with a button that opens the right System Settings pane and a live check of the permission (the tour resumes if macOS relaunches Taupe); connecting Claude or ChatGPT (optional); then the first folder to scan.
+
+### Fixed
+- The app now keeps the same local port between launches, so the page keeps its storage: the chat history, the chosen AI and the onboarding progress were lost on every restart.
+
 ### Security
 - **Codex (ChatGPT) no longer has a shell**: its command tools are switched off (`--disable shell_tool --disable unified_exec`), so the "no shell" promise now holds for both AIs. A Codex too old for these flags is refused with a message asking to update it. A new test checks the arguments passed to both CLIs.
 - The anti-CSRF token is **no longer written into the page** in the app: Electron adds it to the window's requests. The browser development mode is unchanged.

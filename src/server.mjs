@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { Session } from './scanner.mjs';
 import * as ai from './ai.mjs';
 import { tr, pickLang } from './i18n.mjs';
-import { HOME, PLATFORM, IS_MAC, expand, isProtected, isSensitive, places, fallbackActions } from './platform.mjs';
+import { HOME, PLATFORM, IS_MAC, expand, isProtected, isSensitive, places, fallbackActions, fullDiskAccess } from './platform.mjs';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 // MCP script launched by the AI CLI: in production it is unpacked from the asar archive (asarUnpack)
@@ -176,6 +176,12 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
     'GET /api/status': async (_, q, lang) => ({ ...session.status(), home: HOME, platform: PLATFORM, app, version, sep,
       places: places(lang), canPick: app, volume: await volume(session.rootPath || HOME) }),
     'POST /api/pick': async () => ({ path: await actions.pickFolder() }),
+    // macOS Full Disk Access (onboarding): state, and opening the right System Settings pane
+    'GET /api/privacy': async () => ({ fullDiskAccess: await fullDiskAccess() }),
+    'POST /api/privacy/open': async () => {
+      if (!IS_MAC) throw new HttpError(400, 'Réservé à macOS');
+      await actions.openPrivacySettings(); return { ok: true };
+    },
     'POST /api/scan': async b => {
       const p = expand(b.path);
       let st; try { st = await fsp.stat(p); } catch { throw new HttpError(400, 'Chemin introuvable : {p}', { p }); }
@@ -354,6 +360,7 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
   return new Promise((resolve, reject) => {
     server.on('error', (/** @type {NodeJS.ErrnoException} */ e) => {
       if (e.code === 'EADDRINUSE' && PORT && PORT < port + 20) { PORT++; server.listen(PORT, '127.0.0.1'); }
+      else if (e.code === 'EADDRINUSE' && PORT) { PORT = 0; server.listen(0, '127.0.0.1'); } // all taken: any free port
       else reject(e);
     });
     server.on('listening', () => {
