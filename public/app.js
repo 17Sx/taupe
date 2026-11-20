@@ -3,6 +3,8 @@
 const TOKEN = /** @type {HTMLMetaElement | null} */ (document.querySelector('meta[name=token]'))?.content || '';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Plain text of an HTML snippet, read by the browser's parser (an inert <template>: nothing runs or loads)
+const htmlText = h => { const tpl = document.createElement('template'); tpl.innerHTML = h; return tpl.content.textContent || ''; };
 const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const PLATFORM = document.body.dataset.platform || 'darwin', IS_APP = document.body.dataset.app === '1';
 const IS_WIN = PLATFORM === 'win32', IS_MAC = PLATFORM === 'darwin';
@@ -125,7 +127,7 @@ function renderHeader() {
     meta += ` · <span title="${esc(t('Différence entre l’espace utilisé et ce qui est visible : système, snapshots APFS (Time Machine), espace purgeable, fichiers d’autres utilisateurs non lisibles.'))}">${t('volume utilisé : {x}', { x: fmtSize(used) })} ⓘ</span>`;
   }
   const errs = S.status?.scan?.errors;
-  if (errs) meta += ` · <span class="tag" title="${esc(t('Ces dossiers n’ont pas pu être lus (droits d’accès).') + ' ' + HINT.replace(/<[^>]+>/g, ''))}">${tn(errs, '⚠ {n} dossier inaccessible', '⚠ {n} dossiers inaccessibles')}</span>`;
+  if (errs) meta += ` · <span class="tag" title="${esc(t('Ces dossiers n’ont pas pu être lus (droits d’accès).') + ' ' + htmlText(HINT))}">${tn(errs, '⚠ {n} dossier inaccessible', '⚠ {n} dossiers inaccessibles')}</span>`;
   $('#curMeta').innerHTML = meta;
   $('#upBtn').disabled = d.crumbs.length < 2;
   $('#chatCtx').textContent = pretty(d.path);
