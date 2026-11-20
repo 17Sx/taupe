@@ -1,6 +1,6 @@
 {
   // Type-checks the engine's JavaScript (no build, nothing emitted). The UI has its own config:
-  // tsconfig.ui.json (classic browser scripts, not modules). Both run in `npm run check`.
+  // tsconfig.ui.json (classic browser scripts, not modules). Both run in `bun run check`.
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,

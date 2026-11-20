@@ -1,5 +1,5 @@
 // Generates build/icon.png (1024×1024) from build/icon.svg with Electron (transparent rendering).
-// Usage: npx electron scripts/make-icon.mjs
+// Usage: bun run icons
 // electron-builder then derives the .icns (macOS) and .ico (Windows) icons from it.
 import { app, BrowserWindow } from 'electron';
 import fs from 'node:fs';

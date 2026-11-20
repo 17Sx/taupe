@@ -7,7 +7,7 @@ Please don't open a public issue. Use **[Security → Report a vulnerability](ht
 ## Security model
 
 - The UI talks to a local engine that listens **only on 127.0.0.1**, on a random port.
-- Every request must carry a **secret token** generated at startup (anti-CSRF). In the app the token is **never written into the page**: Electron adds it to the window's requests (`session.webRequest`), so a local program that reads `http://127.0.0.1:<port>/` does not get it. Only the browser development mode (`npm run dev:web`) puts it in the page. The `Host` header is checked (anti DNS rebinding).
+- Every request must carry a **secret token** generated at startup (anti-CSRF). In the app the token is **never written into the page**: Electron adds it to the window's requests (`session.webRequest`), so a local program that reads `http://127.0.0.1:<port>/` does not get it. Only the browser development mode (`bun run dev:web`) puts it in the page. The `Host` header is checked (anti DNS rebinding).
 - A deletion request sends **both the item ID and the expected path**. If the tree has changed in the meantime, the deletion is refused.
 - Deletions go through the system **Trash / Recycle Bin** (`shell.trashItem`). System folders, the user's main folders and secrets (`~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, keychains, Windows credentials…) are **always refused**. Paths are compared after resolving symlinks in parent folders and without case on macOS / Windows, so `~/documents` or `/tmp/link-to-home/Documents` are refused too.
 - App data (`~/Library/…` on macOS, `AppData\…` on Windows, except the temporary folder) needs a **reinforced confirmation**: the engine refuses it until the user ticks an explicit "I checked every item" box.

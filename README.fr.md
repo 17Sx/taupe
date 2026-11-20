@@ -88,15 +88,15 @@ Chaque action s'affiche en direct dans l'assistant, avec une animation. Techniqu
 
 ## Développement
 
-Il faut Node.js 20 ou plus récent.
+Il faut [Bun](https://bun.com) 1.4 ou plus récent. Pour construire les installeurs, il faut aussi Node.js 20+, car electron-builder tourne sous Node.
 
 ```bash
-npm install
-npm start            # lance l'application (Electron)
-npm test             # tests du moteur
-npm run check        # syntaxe, ESLint, tsc --checkJs
-npm run dist:mac     # construit le .dmg (sur macOS)
-npm run dist:win     # construit l'installeur .exe (sur Windows)
+bun install
+bun start            # lance l'application (Electron)
+bun run test         # tests du moteur
+bun run check        # ESLint (syntaxe comprise), tsc --checkJs
+bun run dist:mac     # construit le .dmg (sur macOS)
+bun run dist:win     # construit l'installeur .exe (sur Windows)
 ```
 
 Architecture :

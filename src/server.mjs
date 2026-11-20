@@ -1,7 +1,7 @@
 // Taupe — local server (127.0.0.1 only) that powers the UI.
 // In the app, it runs in a separate process started by Electron (electron/worker.mjs),
 // which provides it with native system actions (Trash, Finder/Explorer, Quick Look, folder picker).
-// In development, `node src/server.mjs` runs it standalone with fallback actions.
+// In development, `bun run dev:web` runs it standalone with fallback actions.
 import http from 'node:http';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -372,9 +372,9 @@ export function startServer({ port = 0, actions = fallbackActions, app = false, 
   });
 }
 
-// ---------- Development mode: `node src/server.mjs` ----------
+// ---------- Development mode: `bun run dev:web` (bun src/server.mjs) ----------
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { url } = await startServer({ port: Number(process.env.PORT) || 4747 });
-  console.log(`\n  🐾 Taupe (mode dev, navigateur) : ${url}\n  Pour l'application : npm start\n`);
+  console.log(`\n  🐾 Taupe (mode dev, navigateur) : ${url}\n  Pour l'application : bun start\n`);
   if (!process.argv.includes('--no-open')) fallbackActions.openExternal(url).catch(() => {});
 }

@@ -86,15 +86,15 @@ Every action shows up live in the assistant, with an animation. Under the hood, 
 
 ## Development
 
-Requires Node.js 20 or later.
+Requires [Bun](https://bun.com) 1.4 or later. Building the installers also needs Node.js 20+, because electron-builder runs on Node.
 
 ```bash
-npm install
-npm start            # run the app (Electron)
-npm test             # engine tests
-npm run check        # syntax, ESLint, tsc --checkJs
-npm run dist:mac     # build the .dmg (on macOS)
-npm run dist:win     # build the .exe installer (on Windows)
+bun install
+bun start            # run the app (Electron)
+bun run test         # engine tests
+bun run check        # ESLint (incl. syntax), tsc --checkJs
+bun run dist:mac     # build the .dmg (on macOS)
+bun run dist:win     # build the .exe installer (on Windows)
 ```
 
 Architecture:

@@ -27,17 +27,18 @@
   ],
   "scripts": {
     "start": "electron .",
-    "dev:web": "node src/server.mjs",
-    "check": "node scripts/check.mjs && eslint . && tsc -p tsconfig.json && tsc -p tsconfig.ui.json",
-    "lint": "eslint .",
-    "test": "node scripts/ai-args-test.mjs && node scripts/smoke.mjs && node scripts/mcp-test.mjs",
+    "dev:web": "bun src/server.mjs",
+    "check": "bun --bun eslint . && bun --bun tsc -p tsconfig.json && bun --bun tsc -p tsconfig.ui.json",
+    "lint": "bun --bun eslint .",
+    "test": "bun scripts/ai-args-test.mjs && bun scripts/smoke.mjs && bun scripts/mcp-test.mjs",
     "icons": "electron scripts/make-icon.mjs",
     "dist": "electron-builder --publish never",
     "dist:mac": "electron-builder --mac --publish never",
     "dist:win": "electron-builder --win --publish never"
   },
+  "packageManager": "bun@1.4.2",
   "engines": {
-    "node": ">=20"
+    "bun": ">=1.4"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
