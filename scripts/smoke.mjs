@@ -127,7 +127,7 @@ try {
     });
   } else console.log('… corbeille non testée sur cette machine');
 
-  console.log(`\n${ok} tests OK (${process.platform}, Node ${process.version})`);
+  console.log(`\n${ok} tests OK (${process.platform}, ${process.versions.bun ? `Bun ${process.versions.bun}` : `Node ${process.version}`})`);
   void fallbackActions;
 } finally {
   close();

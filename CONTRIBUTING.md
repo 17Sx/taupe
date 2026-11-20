@@ -11,13 +11,13 @@ Thanks for your interest! A few simple rules:
 ## Before opening a PR
 
 ```bash
-npm install
-npm run check
-npm test
-npm start   # check manually in the app
+bun install
+bun run check
+bun run test
+bun start   # check manually in the app
 ```
 
-- Keep the engine (`src/`) **dependency-free**: built-in Node modules only.
+- Keep the engine (`src/`) **dependency-free**: built-in `node:` modules only. The app runs it on Electron's Node, the tests on Bun, so it must work on both.
 - Anything OS-specific goes in `src/platform.mjs` or `electron/main.mjs`.
 - Add a line to `CHANGELOG.md`, under "Unreleased".
 - Commit messages **in English**, following [Conventional Commits](https://www.conventionalcommits.org/):

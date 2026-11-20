@@ -13,7 +13,8 @@ All notable changes to Taupe are documented in this file. The format is based on
 - Inputs used as keys (AI provider, MCP tool, route, native action) only accept own keys (`Object.hasOwn`), and locating the AI CLIs no longer pastes a name into a shell command.
 
 ### Changed
-- `npm run check` also runs ESLint and `tsc --checkJs`. New CodeQL workflow; GitHub Actions pinned by commit SHA, with per-job permissions; releases ship a `SHA256SUMS.txt`.
+- **The project now uses Bun** instead of npm: `bun install` (`bun.lock` replaces `package-lock.json`), `bun start`, `bun run check`, `bun run test`, and the tests and checks run on the Bun runtime. CI, releases and Dependabot use Bun. Building the installers still needs Node.js, since electron-builder hangs on Bun; the app itself still runs on Electron's Node. `scripts/check.mjs` is gone: ESLint already reports syntax errors.
+- `bun run check` also runs ESLint and `tsc --checkJs`. New CodeQL workflow; GitHub Actions pinned by commit SHA, with per-job permissions; releases ship a `SHA256SUMS.txt`.
 
 ## [1.1.0] - 2026-11-19
 

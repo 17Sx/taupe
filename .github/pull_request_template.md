@@ -4,6 +4,6 @@
 
 ## Checked
 
-- [ ] `npm run check` and `npm test` pass
-- [ ] Tested in the app (`npm start`) on: macOS / Windows
+- [ ] `bun run check` and `bun run test` pass
+- [ ] Tested in the app (`bun start`) on: macOS / Windows
 - [ ] CHANGELOG.md updated ("Unreleased" section)

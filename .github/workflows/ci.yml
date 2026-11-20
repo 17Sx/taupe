@@ -20,16 +20,13 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-    env:
-      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run check   # syntax, ESLint, tsc --checkJs
-      - run: npm test
+          bun-version-file: package.json   # "packageManager" field
+      - run: bun install --frozen-lockfile
+      - run: bun run check   # ESLint (incl. syntax), tsc --checkJs
+      - run: bun run test

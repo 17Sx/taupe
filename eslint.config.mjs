@@ -1,4 +1,4 @@
-// ESLint (flat config). Run through `npm run check`.
+// ESLint (flat config). Run through `bun run check`.
 import js from '@eslint/js';
 import globals from 'globals';
 
