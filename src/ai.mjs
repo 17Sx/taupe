@@ -69,6 +69,7 @@ async function findBin(name, fresh = false) {
   const env = process.env;
   const dirs = IS_WIN
     ? [path.join(HOME, '.local', 'bin'), env.APPDATA && path.join(env.APPDATA, 'npm'), env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, 'Programs', name),
+      env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, 'Programs', 'OpenAI', 'Codex', 'bin'), // Codex standalone installer
       path.join(HOME, '.bun', 'bin'), ...(env.PATH || '').split(path.delimiter)]
     : [path.join(HOME, '.local/bin'), path.join(HOME, '.claude/local'), '/opt/homebrew/bin', '/usr/local/bin',
       path.join(HOME, '.bun/bin'), path.join(HOME, '.npm-global/bin'), ...(env.PATH || '').split(path.delimiter)];
@@ -174,7 +175,7 @@ export function chatArgs(provider, { mcpConfigFile = '', mcp = null, outFile = '
 
 // A Codex too old for CODEX_LOCKDOWN answers "Unknown feature flag": say how to fix it
 function codexError(e, lang) {
-  if (/unknown feature flag/i.test(e.message)) throw new Error(tr(lang, 'Codex est trop ancien pour qu’on lui retire son shell. Mets-le à jour : npm install -g @openai/codex'));
+  if (/unknown feature flag/i.test(e.message)) throw new Error(tr(lang, 'Codex est trop ancien pour qu’on lui retire son shell. Mets-le à jour avec son installeur officiel : {p}', { p: INSTALL.codex[IS_WIN ? 'win' : 'mac'] }));
   throw e;
 }
 
@@ -245,10 +246,13 @@ export async function chatAgent(provider, context, messages, mcp, onProc, lang =
 }
 
 // ---------- Accounts: status, login, logout ----------
+// Official standalone installers: they download the CLI itself (no npm, no Node.js needed).
+// mac = macOS / Linux shell, win = PowerShell.
 export const INSTALL = {
   claude: { mac: 'curl -fsSL https://claude.ai/install.sh | bash', win: 'irm https://claude.ai/install.ps1 | iex',
     docs: 'https://docs.claude.com/en/docs/claude-code/setup' },
-  codex: { mac: 'npm install -g @openai/codex', win: 'npm install -g @openai/codex', docs: 'https://github.com/openai/codex' },
+  codex: { mac: 'curl -fsSL https://chatgpt.com/codex/install.sh | sh', win: 'irm https://chatgpt.com/codex/install.ps1 | iex',
+    docs: 'https://github.com/openai/codex' },
 };
 const stripAnsi = s => s.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/\x1b\][^\x07]*\x07/g, '');
 
@@ -306,25 +310,23 @@ export function connect(provider, lang = 'en') {
   })().catch(e => { if (job.status === 'running') Object.assign(job, { status: 'error', output: job.output + '\n' + e.message }); statusAt = 0; });
 }
 
-// Official installers (Claude Code: Anthropic's script; Codex: npm, or Homebrew on Mac)
+// Official standalone installers (Anthropic's and OpenAI's scripts): nothing else to install first
+export function installerCommand(provider, win = IS_WIN) {
+  const line = INSTALL[provider][win ? 'win' : 'mac'];
+  return win
+    ? { cmd: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', line] }
+    : { cmd: '/bin/sh', args: ['-c', line] };
+}
 async function runInstaller(provider, job, lang = 'en') {
-  let cmd, args;
-  if (provider === 'claude') {
-    if (IS_WIN) { cmd = 'powershell.exe'; args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'irm https://claude.ai/install.ps1 | iex']; }
-    else { cmd = '/bin/bash'; args = ['-c', 'curl -fsSL https://claude.ai/install.sh | bash']; }
-  } else {
-    const npm = await findBin('npm', true);
-    const brew = !IS_WIN && await findBin('brew', true);
-    if (npm) { cmd = npm; args = ['install', '-g', '@openai/codex']; }
-    else if (brew) { cmd = brew; args = ['install', 'codex']; }
-    else throw new Error(tr(lang, 'Installer ChatGPT (Codex) nécessite Node.js : installe-le depuis nodejs.org puis réessaie.'));
-  }
-  await new Promise((resolve, reject) => {
-    const p = job.proc = spawnCli(cmd, args, { cwd: os.tmpdir(), env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
+  const { cmd, args } = installerCommand(provider);
+  // The Codex installer asks questions on the terminal ("Start Codex now?"…): always answer no
+  const env = { ...childEnv(), CODEX_NON_INTERACTIVE: '1' };
+  await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
+    const p = job.proc = spawnCli(cmd, args, { cwd: os.tmpdir(), env, stdio: ['ignore', 'pipe', 'pipe'] });
     p.stdout.on('data', d => (job.output += d)); p.stderr.on('data', d => (job.output += d));
     p.on('error', reject);
     p.on('close', code => (code === 0 ? resolve(undefined) : reject(new Error(tr(lang, 'Installation échouée (code {p})', { p: code })))));
-  });
+  }));
 }
 
 function startLogin(bin, provider, job) {

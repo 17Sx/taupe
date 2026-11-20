@@ -1,7 +1,7 @@
 // Checks the arguments Taupe passes to the AI CLIs (Claude Code, Codex): the AI must only ever get
 // Taupe's own MCP tools — no shell, no file reading or writing, no approval bypass.
 import assert from 'node:assert/strict';
-import { analysisArgs, chatArgs, CODEX_LOCKDOWN, TOOL_NAMES, isProvider } from '../src/ai.mjs';
+import { analysisArgs, chatArgs, CODEX_LOCKDOWN, TOOL_NAMES, isProvider, installerCommand } from '../src/ai.mjs';
 
 let ok = 0;
 const step = (name, fn) => { fn(); ok++; console.log('✓', name); };
@@ -57,6 +57,17 @@ step('Codex (chat): only the Taupe MCP server, env passed as valid TOML', () => 
 step('only real providers are accepted', () => {
   assert.ok(isProvider('claude') && isProvider('codex'));
   for (const p of ['__proto__', 'constructor', 'toString', 'hasOwnProperty', '', 'claude; rm -rf ~', null, undefined, 42]) assert.ok(!isProvider(p), String(p));
+});
+
+step('installers: official standalone scripts, no npm / Node.js needed', () => {
+  for (const [provider, host] of [['claude', 'https://claude.ai/'], ['codex', 'https://chatgpt.com/codex/']]) {
+    const mac = installerCommand(provider, false), win = installerCommand(provider, true);
+    assert.equal(mac.cmd, '/bin/sh'); assert.equal(mac.args[0], '-c');
+    assert.ok(mac.args[1].startsWith(`curl -fsSL ${host}install.sh | `), mac.args[1]);
+    assert.equal(win.cmd, 'powershell.exe');
+    assert.ok(win.args.at(-1) === `irm ${host}install.ps1 | iex`, win.args.at(-1));
+    for (const a of [...mac.args, ...win.args]) assert.ok(!/\bnpm\b|\bbrew\b/.test(a), a);
+  }
 });
 
 console.log(`\n${ok} tests CLI OK`);
