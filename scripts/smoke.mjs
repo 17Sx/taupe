@@ -95,6 +95,7 @@ try {
       try {
         assert.ok(isProtected(path.join(link, 'Documents')), 'contourné par un lien symbolique');
         assert.ok(isProtected(path.join(link, '.ssh', 'x')));
+        assert.ok(isProtected(path.join(link, '.kube', 'nope', 'x')), 'parent folder missing: resolve the deepest existing one');
         assert.ok(!isProtected(link), 'le lien lui-même part seul à la corbeille');
       } finally { fs.unlinkSync(link); }
     }
@@ -104,7 +105,9 @@ try {
       assert.ok(isSensitive(path.join(HOME, 'library', 'Application Support', 'x')));
       assert.ok(isProtected(path.join(HOME, 'Library', 'Keychains', 'login.keychain-db')));
     }
-    assert.ok(!isSensitive(victim));
+    assert.ok(!isSensitive(victim)); // the temporary folder is never app data (on Windows it lives in AppData)
+    assert.ok(!isSensitive(os.tmpdir()));
+    if (IS_WIN) assert.ok(isSensitive(path.join(HOME, 'AppData', 'Roaming', 'SomeApp')));
   });
 
   await step('refus si le chemin ne correspond pas', async () => {
