@@ -15,7 +15,7 @@ const victim = mk('vieux-installeur.dmg', 400_000);
 
 const trashed = [];
 const actions = { trash: async ps => { for (const p of ps) { fs.rmSync(p, { recursive: true, force: true }); trashed.push(p); } return {}; },
-  reveal: async () => {}, open: async () => {}, quicklook: async () => {}, openExternal: async () => {}, pickFolder: async () => null };
+  reveal: async () => {}, open: async () => {}, quicklook: async () => {}, openExternal: async () => {}, pickFolder: async () => null, openPrivacySettings: async () => {} };
 const srv = await startServer({ port: 0, actions, testing: true });
 console.log('serveur', srv.url);
 const html = await (await fetch(srv.url)).text();

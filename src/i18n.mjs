@@ -23,6 +23,7 @@ const EN = {
   'Route inconnue': 'Unknown route', 'Méthode refusée': 'Method not allowed',
   'Chemin protégé (système ou dossier principal)': 'Protected path (system or main folder)',
   'Non déplacé': 'Not moved',
+  'Réservé à macOS': 'macOS only',
   'Données d’application : confirmation renforcée requise': 'App data: reinforced confirmation required',
   'L’élément a changé depuis l’affichage — recharge': 'The item changed since it was displayed — reload',
 

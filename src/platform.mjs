@@ -105,6 +105,17 @@ export function places(lang = 'en') {
   ];
 }
 
+// ---------- macOS Full Disk Access ----------
+// The privacy database itself is only readable with Full Disk Access: opening it tells whether Taupe
+// (the app that runs this engine) has it. true / false, or null when unknown or not macOS.
+export async function fullDiskAccess() {
+  if (!IS_MAC) return null;
+  try { await (await fs.promises.open(H('Library', 'Application Support', 'com.apple.TCC', 'TCC.db'), 'r')).close(); return true; }
+  catch (e) { return e.code === 'EPERM' || e.code === 'EACCES' ? false : null; }
+}
+// System Settings → Privacy & Security → Full Disk Access
+export const FULL_DISK_ACCESS_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles';
+
 // ---------- Fallback system actions (development mode without Electron) ----------
 // In the app, Electron provides its own native actions (shell.trashItem, etc.).
 const run = (cmd, args, opts = {}) => new Promise((res, rej) =>
@@ -145,6 +156,7 @@ foreach ($p in ($env:TAUPE_PATHS | ConvertFrom-Json)) {
   },
   openExternal: url => (IS_MAC ? run('open', [url]) : IS_WIN ? run('cmd.exe', ['/c', 'start', '""', url]) : run('xdg-open', [url])),
   pickFolder: async () => null, // no native picker outside the app
+  openPrivacySettings: () => (IS_MAC ? run('open', [FULL_DISK_ACCESS_PANE]) : null),
 };
 // explorer.exe returns an error code even on success: ignore it.
 function explorer(arg) {

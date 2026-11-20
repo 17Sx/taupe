@@ -46,6 +46,16 @@ try {
     } finally { appSrv.close(); }
   });
 
+  await step('onboarding : état de l’Accès complet au disque, port stable', async () => {
+    const { fullDiskAccess } = await call('GET', '/api/privacy');
+    if (IS_MAC) assert.ok(fullDiskAccess === true || fullDiskAccess === false || fullDiskAccess === null);
+    else assert.equal(fullDiskAccess, null);
+    // the port asked for is busy: the engine takes the next one instead of failing
+    const busy = await startServer({ port: 0 });
+    const next = await startServer({ port: busy.port });
+    try { assert.ok(next.port > busy.port && next.port <= busy.port + 20, `port ${next.port}`); } finally { next.close(); busy.close(); }
+  });
+
   await step('validation : clés héritées refusées (__proto__, constructor…)', async () => {
     const raw = (p, body) => fetch(url + p, { method: 'POST', headers: { 'x-token': token, 'content-type': 'application/json' }, body: JSON.stringify(body) });
     for (const provider of ['__proto__', 'constructor', 'toString', 'claude; touch /tmp/x']) {
