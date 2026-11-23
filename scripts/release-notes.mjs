@@ -14,7 +14,8 @@ export function changelogSection(changelog, version) {
   for (const line of changelog.split('\n')) {
     if (/^## /.test(line)) {
       if (on) break;
-      on = new RegExp(`^## \\[?${version.replace(/\./g, '\\.')}\\]?(\\s|$)`).test(line);
+      // "## [1.2.0] - date" or "## 1.2.0": compare the first word, no regex built from the input
+      on = line.slice(3).trim().split(/\s/)[0].replace(/^\[|\]$/g, '') === version;
       continue;
     }
     if (on) out.push(line);
