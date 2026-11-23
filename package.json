@@ -30,7 +30,7 @@
     "dev:web": "bun src/server.mjs",
     "check": "bun --bun eslint . && bun --bun tsc -p tsconfig.json && bun --bun tsc -p tsconfig.ui.json",
     "lint": "bun --bun eslint .",
-    "test": "bun scripts/ai-args-test.mjs && bun scripts/smoke.mjs && bun scripts/mcp-test.mjs",
+    "test": "bun scripts/ai-args-test.mjs && bun scripts/update-test.mjs && bun scripts/smoke.mjs && bun scripts/mcp-test.mjs",
     "icons": "electron scripts/make-icon.mjs",
     "dist": "electron-builder --publish never",
     "dist:mac": "electron-builder --mac --publish never",
@@ -43,98 +43,13 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "26.6.6",
-    "electron": "45.2.1",
+    "electron": "45.3.3",
     "electron-builder": "26.18.0",
     "eslint": "10.15.0",
     "globals": "17.14.0",
     "typescript": "7.0.2"
   },
-  "build": {
-    "appId": "io.github.17sx.taupe",
-    "productName": "Taupe",
-    "copyright": "Copyright © 2026 17Sx — MIT",
-    "directories": {
-      "output": "dist",
-      "buildResources": "build"
-    },
-    "files": [
-      "electron/**",
-      "src/**",
-      "public/**",
-      "package.json",
-      "LICENSE"
-    ],
-    "artifactName": "Taupe-${version}-${os}-${arch}.${ext}",
-    "mac": {
-      "category": "public.app-category.utilities",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        }
-      ],
-      "icon": "build/icon.png",
-      "identity": "-",
-      "hardenedRuntime": false,
-      "gatekeeperAssess": false,
-      "extendInfo": {
-        "NSDesktopFolderUsageDescription": "Taupe analyse la taille des fichiers de ton Bureau.",
-        "NSDocumentsFolderUsageDescription": "Taupe analyse la taille des fichiers de tes Documents.",
-        "NSDownloadsFolderUsageDescription": "Taupe analyse la taille des fichiers de tes Téléchargements.",
-        "NSRemovableVolumesUsageDescription": "Taupe peut analyser les disques externes."
-      }
-    },
-    "dmg": {
-      "title": "Taupe ${version}"
-    },
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "build/icon.png"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "shortcutName": "Taupe",
-      "artifactName": "Taupe-${version}-win-${arch}-setup.${ext}"
-    },
-    "portable": {
-      "artifactName": "Taupe-${version}-win-${arch}-portable.${ext}"
-    },
-    "linux": {
-      "target": [
-        "AppImage"
-      ],
-      "category": "Utility",
-      "icon": "build/icon.png"
-    },
-    "asarUnpack": [
-      "src/mcp.mjs"
-    ]
+  "dependencies": {
+    "electron-updater": "6.8.11"
   }
 }
