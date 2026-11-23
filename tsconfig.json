@@ -13,5 +13,5 @@
     "strict": false,
     "skipLibCheck": true
   },
-  "include": ["src/**/*.mjs", "electron/**/*.mjs", "scripts/**/*.mjs", "*.mjs"]
+  "include": ["src/**/*.mjs", "electron/**/*.mjs", "scripts/**/*.mjs", "*.mjs", "electron-builder.js"]
 }

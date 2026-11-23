@@ -16,7 +16,7 @@ export default [
     },
   },
   {
-    files: ['src/**/*.mjs', 'electron/**/*.mjs', 'scripts/**/*.mjs', '*.mjs'],
+    files: ['src/**/*.mjs', 'electron/**/*.mjs', 'scripts/**/*.mjs', '*.mjs', 'electron-builder.js'],
     languageOptions: { ecmaVersion: 'latest', sourceType: 'module', globals: { ...globals.node } },
   },
   {

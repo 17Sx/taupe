@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/17Sx/taupe/releases/latest">Download</a> ·
+  <a href="https://github.com/17Sx/taupe-releases/releases/latest">Download</a> ·
   <a href="#features">Features</a> ·
   <a href="#ai-claude--chatgpt">AI</a> ·
   <a href="#development">Development</a> ·
@@ -28,11 +28,11 @@
 - **AI assistant** in a side panel. It knows the folder you are looking at, and its answers contain clickable paths.
 - **Safe deletion**: everything goes to the **Trash** (macOS) or **Recycle Bin** (Windows) after confirmation. System folders are protected.
 - **English and French UI**: follows the system language and can be changed in View → Language.
-- **100% local**: no data leaves your machine, except to the AI if you use it (folder structure only, see below).
+- **100% local**: no data leaves your machine, except to the AI if you use it (folder structure only, see below). The only other request is the update check (the latest version number, on GitHub), which you can switch off.
 
 ## Install
 
-Download the latest version from the **[Releases](https://github.com/17Sx/taupe/releases/latest)** page:
+Download the latest version from the **[Releases](https://github.com/17Sx/taupe-releases/releases/latest)** page:
 
 | System | File |
 |---|---|
@@ -41,10 +41,12 @@ Download the latest version from the **[Releases](https://github.com/17Sx/taupe/
 | Windows 10/11 (installer) | `Taupe-x.y.z-win-x64-setup.exe` |
 | Windows (portable, no install) | `Taupe-x.y.z-win-x64-portable.exe` |
 
-> **macOS**: the app is not signed with an Apple Developer certificate yet. On first launch, right-click → **Open**, or run `xattr -cr /Applications/Taupe.app` in Terminal.
+> **macOS**: releases are signed with an Apple Developer ID and notarized as soon as the certificate is set up (see [docs/signing.md](docs/signing.md)). Each release's notes say whether it is: if it is not notarized yet, right-click → **Open** on first launch, or run `xattr -cr /Applications/Taupe.app` in Terminal.
 > To scan everything (Mail, Photos…), grant Taupe **Full Disk Access**: System Settings → Privacy & Security.
 >
-> **Windows**: if SmartScreen appears, click **More info → Run anyway**.
+> **Windows**: if SmartScreen appears (unsigned build, or a certificate that is still new), click **More info → Run anyway**.
+>
+> **Updates**: the installed app checks for new versions and offers to install them, then restarts. On macOS it can only install them into a notarized build; otherwise, like the Windows portable version, it opens the download page. Switch it off in Help → Check for Updates Automatically.
 
 ## AI (Claude / ChatGPT)
 
@@ -112,7 +114,7 @@ public/              UI (framework-free HTML/CSS/JS)
 
 Branches: `main` = releases, `develop` = integration, `feat/*` / `fix/*` = work in progress. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-To publish a release: update `CHANGELOG.md` and the version in `package.json`, merge `develop` into `main`, then push a `vX.Y.Z` tag. GitHub Actions builds the installers and creates the release.
+To publish a release: update `CHANGELOG.md` and the version in `package.json`, merge `develop` into `main`, then push a `vX.Y.Z` tag. GitHub Actions builds, signs and notarizes the installers (when the certificates are set up, see [docs/signing.md](docs/signing.md)) and publishes them, with the update files, on the public [taupe-releases](https://github.com/17Sx/taupe-releases) repository.
 
 ## Français
 

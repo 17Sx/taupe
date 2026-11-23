@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/17Sx/taupe/releases/latest">Télécharger</a> ·
+  <a href="https://github.com/17Sx/taupe-releases/releases/latest">Télécharger</a> ·
   <a href="#fonctionnalités">Fonctionnalités</a> ·
   <a href="#ia-claude--chatgpt">IA</a> ·
   <a href="#développement">Développement</a> ·
@@ -30,11 +30,11 @@
 - **Assistant IA** dans un panneau latéral. Il connaît le dossier affiché, et ses réponses contiennent des chemins cliquables.
 - **Suppression sûre** : tout part à la **Corbeille** (macOS / Windows) après confirmation. Les dossiers système sont protégés.
 - **Interface en français et en anglais** : elle suit la langue du système et se change dans Présentation → Langue.
-- **100 % local** : aucune donnée n'est envoyée, sauf à l'IA si tu l'utilises (structure uniquement, voir ci-dessous).
+- **100 % local** : aucune donnée n'est envoyée, sauf à l'IA si tu l'utilises (structure uniquement, voir ci-dessous). La seule autre requête est la recherche de mises à jour (le numéro de la dernière version, sur GitHub), que tu peux désactiver.
 
 ## Installer
 
-Télécharge la dernière version sur la page **[Releases](https://github.com/17Sx/taupe/releases/latest)** :
+Télécharge la dernière version sur la page **[Releases](https://github.com/17Sx/taupe-releases/releases/latest)** :
 
 | Système | Fichier |
 |---|---|
@@ -43,10 +43,12 @@ Télécharge la dernière version sur la page **[Releases](https://github.com/17
 | Windows 10/11 (installeur) | `Taupe-x.y.z-win-x64-setup.exe` |
 | Windows (portable, sans installation) | `Taupe-x.y.z-win-x64-portable.exe` |
 
-> **macOS** : l'app n'est pas encore signée par un certificat Apple Developer. Au premier lancement, fais clic droit → **Ouvrir**, ou lance `xattr -cr /Applications/Taupe.app` dans le Terminal.
+> **macOS** : les versions sont signées avec un Developer ID Apple et notarisées dès que le certificat est en place (voir [docs/signing.md](docs/signing.md)). Les notes de chaque version l'indiquent : si elle n'est pas encore notarisée, fais clic droit → **Ouvrir** au premier lancement, ou lance `xattr -cr /Applications/Taupe.app` dans le Terminal.
 > Pour tout analyser (Mail, Photos…), donne l'**Accès complet au disque** à Taupe : Réglages Système → Confidentialité et sécurité.
 >
-> **Windows** : si SmartScreen s'affiche, choisis **Informations complémentaires → Exécuter quand même**.
+> **Windows** : si SmartScreen s'affiche (version non signée, ou certificat encore récent), choisis **Informations complémentaires → Exécuter quand même**.
+>
+> **Mises à jour** : l'app installée vérifie s'il existe une nouvelle version, propose de l'installer puis redémarre. Sur macOS, elle ne peut l'installer que dans une version notarisée ; sinon, comme la version portable Windows, elle ouvre la page de téléchargement. Désactivable dans Aide → Rechercher automatiquement les mises à jour.
 
 ## IA (Claude / ChatGPT)
 
@@ -114,7 +116,7 @@ public/              interface (HTML/CSS/JS sans framework)
 
 Branches : `main` = versions publiées, `develop` = intégration, `feat/*` / `fix/*` = travail en cours. Voir [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Pour publier une version : mets à jour `CHANGELOG.md` et la version dans `package.json`, fusionne `develop` dans `main`, puis pousse un tag `vX.Y.Z`. GitHub Actions construit les installeurs et crée la release.
+Pour publier une version : mets à jour `CHANGELOG.md` et la version dans `package.json`, fusionne `develop` dans `main`, puis pousse un tag `vX.Y.Z`. GitHub Actions construit, signe et notarise les installeurs (quand les certificats sont en place, voir [docs/signing.md](docs/signing.md)) et les publie, avec les fichiers de mise à jour, sur le dépôt public [taupe-releases](https://github.com/17Sx/taupe-releases).
 
 ## Licence
 
