@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: 🔒 Security vulnerability
-    url: https://github.com/17Sx/taupe/security/advisories/new
+    url: https://github.com/17Sx/taupe-releases/security/advisories/new
     about: Report it privately, not in a public issue.

@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Please don't open a public issue. Use **[Security → Report a vulnerability](https://github.com/17Sx/taupe/security/advisories/new)** on GitHub. I'll respond as soon as possible.
+Please don't open a public issue. Use **[Security → Report a vulnerability](https://github.com/17Sx/taupe-releases/security/advisories/new)** on GitHub. I'll respond as soon as possible.
 
 ## Security model
 
@@ -19,3 +19,9 @@ Please don't open a public issue. Use **[Security → Report a vulnerability](ht
 - Commands suggested by the AI analysis (e.g. `docker system prune`) are **never run by Taupe**: they are shown with a "check it before running it" warning and can only be copied.
 - A deletion requested by the AI shows a **confirmation card** and waits for the user's click (5 minutes at most, otherwise nothing happens). Protected paths are refused.
 - The MCP server talks to the engine with the same secret token, only on 127.0.0.1, and only while a conversation is in progress.
+
+## Releases and updates
+
+- Installers are built by GitHub Actions from a tagged commit and published on [17Sx/taupe-releases](https://github.com/17Sx/taupe-releases) with a `SHA256SUMS.txt`.
+- macOS builds are signed with a Developer ID, with the hardened runtime, and notarized by Apple; Windows installers are signed (Azure Artifact Signing). Until the certificates are set up, the release notes say the build is not signed. See [docs/signing.md](docs/signing.md).
+- The app checks for updates with `electron-updater`, over HTTPS, against that repository only. Each downloaded update is checked against the SHA-512 in `latest*.yml`; on macOS, Squirrel also requires the update to carry the same Developer ID signature, and on Windows a signed app only installs an update signed by the same publisher. The check sends nothing but a normal HTTPS request to GitHub, and can be switched off in Help → Check for Updates Automatically.
